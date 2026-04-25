@@ -29,10 +29,13 @@
             </button>
             <div id="trip-dropdown" class="dropdown-panel hidden">
               <div class="row between">
-                <h3>Trips</h3>
+                <h3 class="trip-picker-title">Your Trips</h3>
                 <button id="add-trip-btn" type="button" class="small">+ New Trip</button>
               </div>
-              <div id="trip-list" class="stack"></div>
+              <div id="trip-list" class="stack trip-list-stack"></div>
+              <div class="trip-picker-divider"></div>
+              <button id="magic-ai-import-btn" type="button" class="trip-feature-btn magic-btn">✨ Magic AI Import</button>
+              <button id="trip-intelligence-btn" type="button" class="trip-feature-btn intel-btn">🤖 Trip Intelligence Summary</button>
             </div>
           </div>
 
@@ -200,6 +203,40 @@
 
             <button id="save-activity-btn" type="submit">Save Activity</button>
         </form>
+      </div>
+    </div>
+
+    <div id="magic-import-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="row between tight-bottom">
+          <h2>✨ Magic AI Import</h2>
+          <button id="close-magic-import-modal" type="button" class="danger small">Close</button>
+        </div>
+        <div class="stack">
+          <label for="magic-import-text">Paste unstructured trip text</label>
+          <textarea
+            id="magic-import-text"
+            rows="9"
+            placeholder="Paste confirmation emails, chat notes, or rough itinerary text..."
+          ></textarea>
+          <button id="run-magic-import" type="button">Transform Text</button>
+          <p id="magic-import-status" class="status-text"></p>
+        </div>
+      </div>
+    </div>
+
+    <div id="trip-intelligence-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="row between tight-bottom">
+          <h2>🤖 Trip Intelligence Summary</h2>
+          <button id="close-trip-intelligence-modal" type="button" class="danger small">Close</button>
+        </div>
+        <div class="stack">
+          <button id="run-trip-intelligence" type="button">Generate Summary</button>
+          <div id="trip-intelligence-output" class="weather-box">
+            <p class="meta">Click "Generate Summary" to analyze this trip.</p>
+          </div>
+        </div>
       </div>
     </div>
 

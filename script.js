@@ -17,6 +17,7 @@ let state = defaultState();
 let realtimeChannel = null;
 let syncInFlight = false;
 let syncQueued = false;
+let geminiApiKey = "";
 
 const selectedTripBrand = document.querySelector("#selected-trip-brand");
 const tripList = document.querySelector("#trip-list");
@@ -65,6 +66,17 @@ const activityTagsHost = document.querySelector("#activity-tags");
 const geocodeAddressButton = document.querySelector("#geocode-address");
 const activityLocStatus = document.querySelector("#activity-loc-status");
 let editingActivityId = null;
+const magicAiImportButton = document.querySelector("#magic-ai-import-btn");
+const tripIntelligenceButton = document.querySelector("#trip-intelligence-btn");
+const magicImportModal = document.querySelector("#magic-import-modal");
+const closeMagicImportModalButton = document.querySelector("#close-magic-import-modal");
+const magicImportText = document.querySelector("#magic-import-text");
+const runMagicImportButton = document.querySelector("#run-magic-import");
+const magicImportStatus = document.querySelector("#magic-import-status");
+const tripIntelligenceModal = document.querySelector("#trip-intelligence-modal");
+const closeTripIntelligenceModalButton = document.querySelector("#close-trip-intelligence-modal");
+const runTripIntelligenceButton = document.querySelector("#run-trip-intelligence");
+const tripIntelligenceOutput = document.querySelector("#trip-intelligence-output");
 
 const fields = {
   title: document.querySelector("#activity-title"),
@@ -185,6 +197,30 @@ function setupHandlers() {
   });
   loadWmsLayersButton.addEventListener("click", loadWmsLayersFromUrl);
   addSelectedLayersButton.addEventListener("click", addSelectedWmsLayers);
+
+  magicAiImportButton.addEventListener("click", () => {
+    magicImportStatus.textContent = "";
+    magicImportModal.classList.remove("hidden");
+  });
+  closeMagicImportModalButton.addEventListener("click", () => {
+    magicImportModal.classList.add("hidden");
+  });
+  magicImportModal.addEventListener("click", (event) => {
+    if (event.target === magicImportModal) magicImportModal.classList.add("hidden");
+  });
+  runMagicImportButton.addEventListener("click", runMagicImport);
+
+  tripIntelligenceButton.addEventListener("click", () => {
+    tripIntelligenceOutput.innerHTML = `<p class="meta">Click "Generate Summary" to analyze this trip.</p>`;
+    tripIntelligenceModal.classList.remove("hidden");
+  });
+  closeTripIntelligenceModalButton.addEventListener("click", () => {
+    tripIntelligenceModal.classList.add("hidden");
+  });
+  tripIntelligenceModal.addEventListener("click", (event) => {
+    if (event.target === tripIntelligenceModal) tripIntelligenceModal.classList.add("hidden");
+  });
+  runTripIntelligenceButton.addEventListener("click", runTripIntelligence);
 
   openActivityModalButton.addEventListener("click", () => {
     editingActivityId = null;
@@ -1268,4 +1304,179 @@ function categoryAccentClass(category) {
     default:
       return "accent-default";
   }
+}
+
+async function runMagicImport() {
+  const text = magicImportText.value.trim();
+  if (!text) {
+    magicImportStatus.textContent = "Paste some source text first.";
+    magicImportStatus.className = "status-text warn";
+    return;
+  }
+  const apiKey = await ensureGeminiApiKey();
+  if (!apiKey) {
+    magicImportStatus.textContent = "Gemini API key is required.";
+    magicImportStatus.className = "status-text warn";
+    return;
+  }
+  magicImportStatus.textContent = "Transforming text with AI...";
+  magicImportStatus.className = "status-text";
+  const prompt = `Extract trip planning data from this text and return ONLY strict JSON:
+{
+  "trips":[{"name":"string","startDate":"YYYY-MM-DD or empty"}],
+  "activities":[{"tripName":"string or empty","title":"string","day":"YYYY-MM-DD","time":"HH:MM","notes":"string","location":"string","category":"emoji"}]
+}
+Use emojis only from: 🏔️ 🏖️ 🍽️ 🚗 🌅 📸.
+If no trip found, leave tripName empty.
+Text:
+${text}`;
+  try {
+    const raw = await callGemini(prompt, apiKey);
+    const parsed = extractJsonPayload(raw);
+    if (!parsed || !Array.isArray(parsed.activities)) {
+      throw new Error("AI response format invalid.");
+    }
+    applyMagicImportPayload(parsed);
+    saveState();
+    renderAll();
+    magicImportStatus.textContent = `Imported ${parsed.activities.length} activities.`;
+    magicImportStatus.className = "status-text ok";
+  } catch (error) {
+    magicImportStatus.textContent = `Import failed: ${error.message || "Unknown error"}`;
+    magicImportStatus.className = "status-text warn";
+  }
+}
+
+async function runTripIntelligence() {
+  const apiKey = await ensureGeminiApiKey();
+  if (!apiKey) {
+    tripIntelligenceOutput.innerHTML = `<p class="meta">Gemini API key is required.</p>`;
+    return;
+  }
+  const activeTrip = state.trips.find((trip) => trip.id === state.currentTripId);
+  const activities = state.activities
+    .filter((activity) => activity.tripId === state.currentTripId)
+    .sort(compareActivitiesByDayThenTime)
+    .map(
+      (activity) =>
+        `- ${activity.day} ${activity.time} ${activity.category} ${activity.title} (${activity.location || "No location"})${
+          activity.notes ? ` | ${activity.notes}` : ""
+        }`
+    );
+  if (!activities.length) {
+    tripIntelligenceOutput.innerHTML = `<p class="meta">No activities to analyze for this trip yet.</p>`;
+    return;
+  }
+  tripIntelligenceOutput.innerHTML = `<p class="meta">Analyzing itinerary...</p>`;
+  const prompt = `You are a travel strategist. Analyze this itinerary and respond with JSON only:
+{"summary":"string","missingSuggestion":"string"}
+Trip: ${activeTrip?.name || "Unknown"}
+Activities:
+${activities.join("\n")}`;
+  try {
+    const raw = await callGemini(prompt, apiKey);
+    const parsed = extractJsonPayload(raw);
+    tripIntelligenceOutput.innerHTML = `
+      <p><strong>High-Level Summary</strong></p>
+      <p class="meta">${escapeHtml(parsed.summary || "No summary returned.")}</p>
+      <p style="margin-top:0.5rem;"><strong>Major Missing Suggestion</strong></p>
+      <p class="meta">${escapeHtml(parsed.missingSuggestion || "No suggestion returned.")}</p>
+    `;
+  } catch (error) {
+    tripIntelligenceOutput.innerHTML = `<p class="meta">Unable to generate summary: ${escapeHtml(
+      error.message || "Unknown error"
+    )}</p>`;
+  }
+}
+
+function applyMagicImportPayload(payload) {
+  const tripByName = new Map(state.trips.map((trip) => [trip.name.toLowerCase(), trip]));
+  if (Array.isArray(payload.trips)) {
+    payload.trips.forEach((tripInput) => {
+      const name = String(tripInput?.name || "").trim();
+      if (!name) return;
+      const key = name.toLowerCase();
+      if (!tripByName.has(key)) {
+        const trip = { id: crypto.randomUUID(), name };
+        state.trips.push(trip);
+        tripByName.set(key, trip);
+      }
+    });
+  }
+  payload.activities.forEach((item) => {
+    const title = String(item?.title || "").trim();
+    const day = normalizeDayForSort(item?.day || "");
+    const time = normalizeTimeText(item?.time || "");
+    if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !time) return;
+    const tripName = String(item?.tripName || "").trim().toLowerCase();
+    const trip = (tripName && tripByName.get(tripName)) || state.trips.find((t) => t.id === state.currentTripId) || state.trips[0];
+    const category = normalizeCategoryEmoji(item?.category);
+    state.activities.push({
+      id: crypto.randomUUID(),
+      tripId: trip.id,
+      title,
+      day,
+      time,
+      category,
+      notes: String(item?.notes || "").trim(),
+      location: String(item?.location || "").trim(),
+      address: "",
+      lat: null,
+      lng: null,
+      taggedMembers: [],
+      pinHidden: false,
+      createdAt: new Date().toISOString(),
+    });
+  });
+}
+
+function normalizeCategoryEmoji(raw) {
+  const allowed = new Set(["🏔️", "🏖️", "🍽️", "🚗", "🌅", "📸"]);
+  const value = String(raw || "").trim();
+  return allowed.has(value) ? value : "📸";
+}
+
+function normalizeTimeText(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return "";
+  const hour = Math.max(0, Math.min(23, Number(match[1])));
+  const minute = Math.max(0, Math.min(59, Number(match[2])));
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+async function ensureGeminiApiKey() {
+  if (geminiApiKey) return geminiApiKey;
+  const value = window.prompt("Enter Gemini API key (AI Studio key):");
+  if (!value || !value.trim()) return "";
+  geminiApiKey = value.trim();
+  return geminiApiKey;
+}
+
+async function callGemini(prompt, apiKey) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      }),
+    }
+  );
+  if (!response.ok) throw new Error(`Gemini request failed (${response.status})`);
+  const payload = await response.json();
+  const text = payload?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("\n") || "";
+  if (!text.trim()) throw new Error("Gemini returned empty response.");
+  return text;
+}
+
+function extractJsonPayload(rawText) {
+  const cleaned = String(rawText || "").trim();
+  const fenced = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1].trim() : cleaned;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start < 0 || end < 0 || end <= start) throw new Error("JSON not found in AI response.");
+  return JSON.parse(candidate.slice(start, end + 1));
 }

@@ -120,7 +120,8 @@ body {
 }
 
 #trip-dropdown {
-  width: min(320px, 88vw);
+  width: min(640px, 95vw);
+  padding: 1rem;
 }
 
 #weather-dropdown {
@@ -568,12 +569,13 @@ button.small {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.45rem 0.55rem;
+  border: 2px solid #93c5fd;
+  border-radius: 16px;
+  padding: 0.8rem 0.95rem;
   cursor: pointer;
   color: var(--text);
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 2rem;
   transition: transform 0.15s ease, background 0.15s ease;
 }
 
@@ -584,15 +586,54 @@ button.small {
 
 .trip-row.active {
   border-color: #93c5fd;
-  background: #eff6ff;
+  background: #eef6ff;
 }
 
 .active-pill {
   border-radius: 999px;
-  font-size: 0.72rem;
-  padding: 0.12rem 0.42rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  padding: 0.36rem 0.9rem;
   background: #2563eb;
   color: #fff;
+}
+
+.trip-picker-title {
+  font-size: 2.7rem;
+  font-weight: 800;
+  margin-bottom: 0.2rem;
+}
+
+.trip-list-stack {
+  gap: 0.9rem;
+}
+
+.trip-picker-divider {
+  margin: 0.95rem 0 0.8rem;
+  border-top: 1px solid #cbd5e1;
+}
+
+.trip-feature-btn {
+  width: 100%;
+  border: 2px solid #bfdbfe;
+  border-radius: 16px;
+  background: #eaf2fb;
+  color: #0f172a;
+  padding: 0.95rem 1rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 0.65rem;
+}
+
+.trip-feature-btn:last-child {
+  margin-bottom: 0;
+}
+
+.intel-btn {
+  background: #f1e9f8;
+  border-color: #e9c9ff;
+  color: #8e2ab8;
 }
 
 .icon-btn {
