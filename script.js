@@ -1,6 +1,7 @@
-const STORAGE_KEY = "trip-planner-local-v3";
+const STORAGE_KEY = "trip-planner-local-v4";
 const DEFAULT_MEMBERS = ["Anthony", "Vivian", "Jason", "Darrell"];
 const DEFAULT_TRIP = { id: "madeira-default", name: "Madeira" };
+const DEFAULT_WMS_URL = "https://view.eumetsat.int/geoserver/wms";
 
 let map = null;
 let mapPickMode = false;
@@ -12,17 +13,21 @@ const markerByActivityId = new Map();
 
 let state = loadState();
 
-const currentUserSelect = document.querySelector("#current-user");
-const memberList = document.querySelector("#member-list");
 const tripSelector = document.querySelector("#trip-selector");
 const addTripButton = document.querySelector("#add-trip-btn");
+const currentUserSelect = document.querySelector("#current-user");
+const memberList = document.querySelector("#member-list");
 const notificationList = document.querySelector("#notification-list");
 const selectedDayInput = document.querySelector("#selected-day");
 const dailyActivityList = document.querySelector("#daily-activity-list");
-const activityForm = document.querySelector("#activity-form");
 const clearDataButton = document.querySelector("#clear-data");
-const pickOnMapButton = document.querySelector("#place-on-map");
-const activityTagsHost = document.querySelector("#activity-tags");
+const mapOverlayPanel = document.querySelector("#map-overlay-panel");
+const mapOverlayToggle = document.querySelector("#map-overlay-toggle");
+const activeLayerList = document.querySelector("#active-layer-list");
+
+const mapAddMenuToggle = document.querySelector("#map-add-menu-toggle");
+const mapAddMenu = document.querySelector("#map-add-menu");
+
 const openWmsModalButton = document.querySelector("#open-wms-modal");
 const wmsModal = document.querySelector("#wms-modal");
 const closeWmsModalButton = document.querySelector("#close-wms-modal");
@@ -33,7 +38,15 @@ const wmsUrlInput = document.querySelector("#wms-url-input");
 const wmsError = document.querySelector("#wms-error");
 const wmsLayerSelector = document.querySelector("#wms-layer-selector");
 const wmsLayerOptions = document.querySelector("#wms-layer-options");
-const activeLayerList = document.querySelector("#active-layer-list");
+
+const openActivityModalButton = document.querySelector("#open-activity-modal");
+const activityModal = document.querySelector("#activity-modal");
+const closeActivityModalButton = document.querySelector("#close-activity-modal");
+const activityForm = document.querySelector("#activity-form");
+const activityTagsHost = document.querySelector("#activity-tags");
+const geocodeAddressButton = document.querySelector("#geocode-address");
+const placeOnMapButton = document.querySelector("#place-on-map");
+const activityLocStatus = document.querySelector("#activity-loc-status");
 
 const fields = {
   title: document.querySelector("#activity-title"),
@@ -42,6 +55,7 @@ const fields = {
   category: document.querySelector("#activity-category"),
   notes: document.querySelector("#activity-notes"),
   location: document.querySelector("#activity-location"),
+  address: document.querySelector("#activity-address"),
   lat: document.querySelector("#activity-lat"),
   lng: document.querySelector("#activity-lng"),
 };
@@ -51,6 +65,7 @@ init();
 function init() {
   setupMap();
   setupHandlers();
+  wmsUrlInput.value = DEFAULT_WMS_URL;
   selectedDayInput.value = todayIso();
   selectedDay = selectedDayInput.value;
   renderAll();
@@ -68,27 +83,20 @@ function setupMap() {
     const { lat, lng } = event.latlng;
     fields.lat.value = lat.toFixed(5);
     fields.lng.value = lng.toFixed(5);
+    setActivityLocStatus(`Pinned ${lat.toFixed(5)}, ${lng.toFixed(5)}`, "ok");
     if (tempPickMarker) tempPickMarker.remove();
     tempPickMarker = L.marker([lat, lng]).addTo(map).bindPopup("Selected point").openPopup();
     mapPickMode = false;
-    pickOnMapButton.textContent = "Pick on Map";
+    placeOnMapButton.textContent = "Pick on Map";
   });
 }
 
 function setupHandlers() {
-  fields.day.addEventListener("click", openDayPicker);
-  fields.day.addEventListener("focus", openDayPicker);
   selectedDayInput.addEventListener("click", openSelectedDayPicker);
   selectedDayInput.addEventListener("focus", openSelectedDayPicker);
   selectedDayInput.addEventListener("change", () => {
     selectedDay = selectedDayInput.value;
     renderDailyActivities();
-  });
-
-  currentUserSelect.addEventListener("change", () => {
-    state.activeUser = currentUserSelect.value;
-    saveState();
-    renderNotifications();
   });
 
   tripSelector.addEventListener("change", () => {
@@ -107,23 +115,63 @@ function setupHandlers() {
     renderAll();
   });
 
+  currentUserSelect.addEventListener("change", () => {
+    state.activeUser = currentUserSelect.value;
+    saveState();
+    renderNotifications();
+  });
+
+  mapOverlayToggle.addEventListener("click", () => {
+    const hidden = mapOverlayPanel.classList.toggle("hidden");
+    mapOverlayToggle.textContent = hidden ? "Show Panel" : "Hide Panel";
+  });
+
+  mapAddMenuToggle.addEventListener("click", () => {
+    mapAddMenu.classList.toggle("hidden");
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!mapAddMenu.contains(event.target) && event.target !== mapAddMenuToggle) {
+      mapAddMenu.classList.add("hidden");
+    }
+  });
+
   openWmsModalButton.addEventListener("click", () => {
+    mapAddMenu.classList.add("hidden");
     resetWmsModalState();
     wmsModal.classList.remove("hidden");
   });
-  wmsModal.addEventListener("click", (event) => {
-    if (event.target === wmsModal) {
-      wmsModal.classList.add("hidden");
-    }
-  });
   closeWmsModalButton.addEventListener("click", () => wmsModal.classList.add("hidden"));
   closeWmsModalTopButton.addEventListener("click", () => wmsModal.classList.add("hidden"));
+  wmsModal.addEventListener("click", (event) => {
+    if (event.target === wmsModal) wmsModal.classList.add("hidden");
+  });
   loadWmsLayersButton.addEventListener("click", loadWmsLayersFromUrl);
   addSelectedLayersButton.addEventListener("click", addSelectedWmsLayers);
 
-  pickOnMapButton.addEventListener("click", () => {
+  openActivityModalButton.addEventListener("click", () => {
+    mapAddMenu.classList.add("hidden");
+    renderTagMemberCheckboxes();
+    fields.day.value = selectedDay || todayIso();
+    fields.time.value = "";
+    setActivityLocStatus("", "");
+    activityModal.classList.remove("hidden");
+  });
+  closeActivityModalButton.addEventListener("click", () => activityModal.classList.add("hidden"));
+  activityModal.addEventListener("click", (event) => {
+    if (event.target === activityModal) activityModal.classList.add("hidden");
+  });
+
+  fields.day.addEventListener("click", openDayPicker);
+  fields.day.addEventListener("focus", openDayPicker);
+
+  geocodeAddressButton.addEventListener("click", geocodeAddress);
+  placeOnMapButton.addEventListener("click", () => {
     mapPickMode = !mapPickMode;
-    pickOnMapButton.textContent = mapPickMode ? "Click map to set point" : "Pick on Map";
+    placeOnMapButton.textContent = mapPickMode ? "Click map to set point" : "Pick on Map";
+    if (mapPickMode) {
+      setActivityLocStatus("Click on the map to set coordinates.", "");
+    }
   });
 
   activityForm.addEventListener("submit", (event) => {
@@ -137,6 +185,7 @@ function setupHandlers() {
       category: fields.category.value,
       notes: fields.notes.value.trim(),
       location: fields.location.value.trim(),
+      address: fields.address.value.trim(),
       lat: Number.isFinite(Number(fields.lat.value)) ? Number(fields.lat.value) : null,
       lng: Number.isFinite(Number(fields.lng.value)) ? Number(fields.lng.value) : null,
       taggedMembers: selectedTaggedMembers(),
@@ -145,19 +194,21 @@ function setupHandlers() {
     if (!activity.title || !activity.day || !activity.time) return;
     state.activities.push(activity);
     createTagNotifications(activity);
+    saveState();
+    activityModal.classList.add("hidden");
     activityForm.reset();
+    selectedDayInput.value = activity.day;
+    selectedDay = activity.day;
     if (tempPickMarker) {
       tempPickMarker.remove();
       tempPickMarker = null;
     }
-    selectedDayInput.value = activity.day;
-    selectedDay = activity.day;
-    saveState();
+    setActivityLocStatus("", "");
     renderAll();
   });
 
   clearDataButton.addEventListener("click", () => {
-    if (!window.confirm("Reset all activities, layers, and notifications?")) return;
+    if (!window.confirm("Reset activities, notifications, and map layers for all trips?")) return;
     state = defaultState();
     selectedDayInput.value = todayIso();
     selectedDay = selectedDayInput.value;
@@ -172,7 +223,6 @@ function renderAll() {
   renderTripSelector();
   renderCurrentUserOptions();
   renderMembers();
-  renderTagMemberCheckboxes();
   renderDailyActivities();
   renderNotifications();
   renderMapPins();
@@ -232,6 +282,7 @@ function renderDailyActivities() {
     .filter((activity) => activity.tripId === state.currentTripId)
     .filter((activity) => !selectedDay || activity.day === selectedDay)
     .sort(compareActivitiesByDayThenTime);
+
   if (!filtered.length) {
     const empty = document.createElement("p");
     empty.className = "empty";
@@ -239,6 +290,7 @@ function renderDailyActivities() {
     dailyActivityList.appendChild(empty);
     return;
   }
+
   filtered.forEach((activity) => {
     const card = document.createElement("article");
     card.className = "layer-item";
@@ -309,10 +361,39 @@ function renderMapPins() {
     marker.bindPopup(
       `<strong>${escapeHtml(activity.title)}</strong><br>${escapeHtml(formatDayDisplay(activity.day))} ${escapeHtml(
         activity.time
-      )}<br>${escapeHtml(activity.location || "No place name")}`
+      )}<br>${escapeHtml(activity.location || activity.address || "No place name")}`
     );
     markerByActivityId.set(activity.id, marker);
   });
+}
+
+async function geocodeAddress() {
+  const query = fields.address.value.trim();
+  if (!query) {
+    setActivityLocStatus("Enter an address to geocode.", "warn");
+    return;
+  }
+  setActivityLocStatus("Geocoding...", "");
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) throw new Error(`Geocode failed (${response.status})`);
+    const data = await response.json();
+    if (!data.length) throw new Error("No result found for that address.");
+    const lat = Number(data[0].lat);
+    const lng = Number(data[0].lon);
+    fields.lat.value = lat.toFixed(5);
+    fields.lng.value = lng.toFixed(5);
+    fields.location.value = fields.location.value || data[0].display_name.split(",")[0];
+    map.setView([lat, lng], 12);
+    if (tempPickMarker) tempPickMarker.remove();
+    tempPickMarker = L.marker([lat, lng]).addTo(map).bindPopup("Geocoded location").openPopup();
+    setActivityLocStatus(`Address resolved: ${lat.toFixed(5)}, ${lng.toFixed(5)}`, "ok");
+  } catch (error) {
+    setActivityLocStatus(error.message || "Unable to geocode address.", "warn");
+  }
 }
 
 async function loadWmsLayersFromUrl() {
@@ -363,7 +444,11 @@ function addSelectedWmsLayers() {
   const url = wmsUrlInput.value.trim();
   selected.forEach((input) => {
     if (wmsLayerMap.has(input.value)) return;
-    const layer = L.tileLayer.wms(url, { layers: input.value, format: "image/png", transparent: true }).addTo(map);
+    const layer = L.tileLayer.wms(url, {
+      layers: input.value,
+      format: "image/png",
+      transparent: true,
+    }).addTo(map);
     wmsLayerMap.set(input.value, {
       name: input.value,
       title: input.dataset.title || input.value,
@@ -442,6 +527,12 @@ function clearWmsError() {
   wmsError.classList.add("hidden");
 }
 
+function setActivityLocStatus(message, stateClass) {
+  activityLocStatus.textContent = message;
+  activityLocStatus.className = "status-text";
+  if (stateClass) activityLocStatus.classList.add(stateClass);
+}
+
 function resetWmsModalState() {
   clearWmsError();
   wmsLayerSelector.classList.add("hidden");
@@ -495,15 +586,9 @@ function loadState() {
       currentTripId,
       members: parsed.members.length ? parsed.members : [...DEFAULT_MEMBERS],
       activeUser: parsed.activeUser || DEFAULT_MEMBERS[0],
-      activities: parsed.activities.map((activity) => ({
-        ...activity,
-        tripId: activity.tripId || currentTripId,
-      })),
+      activities: parsed.activities.map((activity) => ({ ...activity, tripId: activity.tripId || currentTripId })),
       notifications: Array.isArray(parsed.notifications)
-        ? parsed.notifications.map((notification) => ({
-            ...notification,
-            tripId: notification.tripId || currentTripId,
-          }))
+        ? parsed.notifications.map((item) => ({ ...item, tripId: item.tripId || currentTripId }))
         : [],
     };
   } catch {

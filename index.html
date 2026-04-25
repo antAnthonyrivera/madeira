@@ -23,94 +23,59 @@
       </div>
     </header>
 
-    <main class="layout">
-      <section class="panel map-panel quadrant-1">
-        <h2>Madeira Map</h2>
+    <main class="map-only-layout">
+      <section class="panel map-panel">
         <div class="map-wrap">
           <div id="map"></div>
-          <button id="open-wms-modal" class="fab" type="button" title="Add WMS layers">+</button>
-          <section id="active-layers-panel" class="active-layers">
-            <h3>Map Layers</h3>
-            <div id="active-layer-list" class="stack">
-              <p class="empty">No WMS layers active.</p>
+
+          <button id="map-overlay-toggle" type="button" class="overlay-toggle">Hide Panel</button>
+
+          <aside id="map-overlay-panel" class="map-overlay-panel">
+            <div class="stack">
+              <label for="selected-day">Selected day</label>
+              <input id="selected-day" type="date" />
+
+              <label for="current-user">Current user</label>
+              <select id="current-user"></select>
             </div>
-          </section>
-        </div>
-      </section>
 
-      <section class="panel day-panel quadrant-2">
-        <h2>Daily Activities</h2>
-        <div class="stack">
-          <label for="selected-day">Selected day</label>
-          <input id="selected-day" type="date" />
-        </div>
-        <div id="daily-activity-list" class="stack">
-          <p class="empty">No activities for selected day.</p>
-        </div>
-      </section>
+            <h3>Team Members</h3>
+            <div id="member-list" class="chips"></div>
 
-      <section class="panel activity-panel quadrant-3">
-        <h2>Add Activity</h2>
-        <form id="activity-form" class="stack">
-          <label for="activity-title">Title</label>
-          <input id="activity-title" required maxlength="80" placeholder="PR8 Ponta de Sao Lourenco" />
+            <h3>Notifications</h3>
+            <div id="notification-list" class="stack">
+              <p class="empty">No notifications.</p>
+            </div>
 
-          <label for="activity-day">Day</label>
-          <input id="activity-day" type="date" required />
+            <section class="active-layers">
+              <div class="row between tight-bottom">
+                <h3>Map Data</h3>
+                <button id="clear-data" class="danger small">Reset</button>
+              </div>
 
-          <label for="activity-time">Start time</label>
-          <input id="activity-time" type="time" required />
+              <details open>
+                <summary><strong>Activities</strong></summary>
+                <div id="daily-activity-list" class="stack">
+                  <p class="empty">No activities for selected day.</p>
+                </div>
+              </details>
 
-          <label for="activity-category">Category emoji</label>
-          <select id="activity-category">
-            <option value="🏔️">🏔️ Hike</option>
-            <option value="🏖️">🏖️ Beach</option>
-            <option value="🍽️">🍽️ Food</option>
-            <option value="🚗">🚗 Drive</option>
-            <option value="🌅">🌅 Sunset</option>
-            <option value="📸">📸 Photo Spot</option>
-          </select>
+              <details open>
+                <summary><strong>Layers</strong></summary>
+                <div id="active-layer-list" class="stack">
+                  <p class="empty">No WMS layers active.</p>
+                </div>
+              </details>
+            </section>
+          </aside>
 
-          <label for="activity-notes">Details</label>
-          <textarea
-            id="activity-notes"
-            rows="3"
-            placeholder="Add context, prep, or plan details."
-          ></textarea>
-
-          <label for="activity-tags">Tag collaborators</label>
-          <div id="activity-tags" class="chips"></div>
-
-          <label for="activity-location">Place name (for map pin)</label>
-          <div class="row">
-            <input id="activity-location" placeholder="e.g. Porto Moniz" />
-            <button type="button" id="place-on-map">Pick on Map</button>
+          <div class="fab-stack">
+            <button id="map-add-menu-toggle" class="fab" type="button" title="Add">+</button>
+            <div id="map-add-menu" class="fab-menu hidden">
+              <button id="open-wms-modal" type="button" class="small">Add Layer</button>
+              <button id="open-activity-modal" type="button" class="small">Add Activity</button>
+            </div>
           </div>
-
-          <label for="activity-lat">Latitude</label>
-          <input id="activity-lat" placeholder="32.7607" />
-
-          <label for="activity-lng">Longitude</label>
-          <input id="activity-lng" placeholder="-17.1462" />
-
-          <button type="submit">Save Activity</button>
-        </form>
-      </section>
-
-      <section class="panel team-panel quadrant-4">
-        <div class="row between tight-bottom">
-          <h2>Team & Notifications</h2>
-          <button id="clear-data" class="danger small">Reset Planner</button>
-        </div>
-        <label for="current-user">Current user</label>
-        <select id="current-user"></select>
-
-        <h3>Team Members</h3>
-        <div id="member-list" class="chips"></div>
-
-        <h3>Notifications</h3>
-        <div id="notification-list" class="stack">
-          <p class="empty">No notifications.</p>
         </div>
       </section>
     </main>
@@ -135,6 +100,63 @@
             <button id="close-wms-modal" type="button" class="danger">Done</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div id="activity-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="row between tight-bottom">
+          <h2>Add Activity</h2>
+          <button id="close-activity-modal" type="button" class="danger small">Close</button>
+        </div>
+        <form id="activity-form" class="stack">
+          <label for="activity-title">Title</label>
+          <input id="activity-title" required maxlength="80" placeholder="PR8 Ponta de Sao Lourenco" />
+
+          <label for="activity-day">Day</label>
+          <input id="activity-day" type="date" required />
+
+          <label for="activity-time">Start time</label>
+          <input id="activity-time" type="time" required />
+
+          <label for="activity-category">Category emoji</label>
+          <select id="activity-category">
+            <option value="🏔️">🏔️ Hike</option>
+            <option value="🏖️">🏖️ Beach</option>
+            <option value="🍽️">🍽️ Food</option>
+            <option value="🚗">🚗 Drive</option>
+            <option value="🌅">🌅 Sunset</option>
+            <option value="📸">📸 Photo Spot</option>
+          </select>
+
+          <label for="activity-notes">Details</label>
+          <textarea id="activity-notes" rows="3" placeholder="Add context, prep, or plan details."></textarea>
+
+          <label for="activity-tags">Tag collaborators</label>
+          <div id="activity-tags" class="chips"></div>
+
+          <label for="activity-location">Place name</label>
+          <input id="activity-location" placeholder="e.g. Porto Moniz" />
+
+          <label for="activity-address">Address (optional)</label>
+          <div class="row">
+            <input id="activity-address" placeholder="e.g. Fanal Forest, Madeira" />
+            <button type="button" id="geocode-address" class="small">Geocode</button>
+          </div>
+
+          <label for="activity-lat">Latitude</label>
+          <input id="activity-lat" placeholder="32.7607" />
+
+          <label for="activity-lng">Longitude</label>
+          <input id="activity-lng" placeholder="-17.1462" />
+
+          <div class="row">
+            <button type="button" id="place-on-map" class="small">Pick on Map</button>
+            <span id="activity-loc-status" class="status-text"></span>
+          </div>
+
+          <button type="submit">Save Activity</button>
+        </form>
       </div>
     </div>
 
