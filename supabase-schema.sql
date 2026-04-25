@@ -18,6 +18,18 @@ create table if not exists public.activities (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.trips (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  start_date date,
+  end_date date,
+  base_currency text default 'EUR',
+  created_at timestamptz not null default now()
+);
+
+alter table public.activities add column if not exists trip_id uuid references public.trips(id) on delete cascade;
+alter table public.activities add column if not exists cost decimal(10,2) default 0;
+
 create table if not exists public.comments (
   id uuid primary key default gen_random_uuid(),
   activity_id uuid not null references public.activities(id) on delete cascade,
@@ -34,24 +46,45 @@ create table if not exists public.notification_actions (
   unique (comment_id, user_name)
 );
 
+create table if not exists public.votes (
+  id uuid primary key default gen_random_uuid(),
+  activity_id uuid not null references public.activities(id) on delete cascade,
+  user_name text not null,
+  created_at timestamptz not null default now(),
+  unique (activity_id, user_name)
+);
+
 alter table public.members enable row level security;
 alter table public.activities enable row level security;
 alter table public.comments enable row level security;
 alter table public.notification_actions enable row level security;
+alter table public.trips enable row level security;
+alter table public.votes enable row level security;
 
 drop policy if exists members_public_all on public.members;
 drop policy if exists activities_public_all on public.activities;
 drop policy if exists comments_public_all on public.comments;
 drop policy if exists notification_actions_public_all on public.notification_actions;
+drop policy if exists trips_public_all on public.trips;
+drop policy if exists votes_public_all on public.votes;
 
 create policy members_public_all on public.members for all using (true) with check (true);
 create policy activities_public_all on public.activities for all using (true) with check (true);
 create policy comments_public_all on public.comments for all using (true) with check (true);
 create policy notification_actions_public_all on public.notification_actions for all using (true) with check (true);
+create policy trips_public_all on public.trips for all using (true) with check (true);
+create policy votes_public_all on public.votes for all using (true) with check (true);
 
 do $$
 begin
   alter publication supabase_realtime add table public.members;
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.trips;
 exception
   when duplicate_object then null;
 end $$;
@@ -66,6 +99,13 @@ end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.comments;
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.votes;
 exception
   when duplicate_object then null;
 end $$;

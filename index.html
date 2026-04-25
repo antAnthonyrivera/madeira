@@ -17,40 +17,49 @@
     <header class="app-header">
       <div>
         <h1>Madeira Crew Planner</h1>
-        <p>Plan your route, discuss options, and settle each day together.</p>
+        <p>Plan multiple trips, vote on activities, and align your crew in real time.</p>
       </div>
-      <div class="share-tip">
-        <strong>Sharing:</strong> run on your machine and open from your team phones/laptops on the same Wi-Fi.
-      </div>
-    </header>
-
-    <main class="layout">
-      <section class="panel controls">
-        <h2>Connection</h2>
+      <details class="connection-box">
+        <summary>Supabase Connection</summary>
         <form id="supabase-form" class="stack">
           <label for="supabase-url">Supabase URL</label>
           <input id="supabase-url" placeholder="https://xyzcompany.supabase.co" />
-
-          <label for="supabase-anon-key">Supabase anon key</label>
-          <textarea id="supabase-anon-key" rows="2" placeholder="eyJhbGciOi..."></textarea>
-
+          <label for="supabase-anon-key">Supabase anon/publishable key</label>
+          <textarea id="supabase-anon-key" rows="2" placeholder="sb_publishable_..."></textarea>
           <button type="submit">Connect Shared Board</button>
           <p id="connection-status" class="status-text">Not connected</p>
         </form>
+      </details>
+    </header>
 
-        <h2>Team Setup</h2>
+    <main class="layout">
+      <section class="panel insights-panel">
+        <h2>Trip Insights</h2>
+        <div class="stack">
+          <label for="trip-selector">Trip</label>
+          <div class="row">
+            <select id="trip-selector"></select>
+            <button id="new-trip-btn" type="button">New Trip</button>
+          </div>
+        </div>
+
+        <div class="stack">
+          <p><strong>Total Trip Cost:</strong> <span id="total-trip-cost">EUR 0.00</span></p>
+          <p><strong>Cost Per Person:</strong> <span id="cost-per-person">EUR 0.00</span></p>
+        </div>
+
+        <h2>WMS Overlay</h2>
+        <div class="stack">
+          <label for="wms-url">WMS Service URL</label>
+          <input id="wms-url" placeholder="https://example.com/geoserver/wms" />
+          <label for="wms-layer-name">Layer Name</label>
+          <input id="wms-layer-name" placeholder="workspace:layer_name" />
+          <button id="apply-wms-overlay" type="button">Apply Overlay</button>
+        </div>
+
+        <h2>User & Mentions</h2>
         <label for="current-user">Current user</label>
         <select id="current-user"></select>
-        <form id="member-form" class="stack">
-          <label for="member-name">Add member</label>
-          <div class="row">
-            <input id="member-name" placeholder="e.g. Antalog" maxlength="24" />
-            <button type="submit">Add</button>
-          </div>
-        </form>
-        <div id="member-list" class="chips"></div>
-
-        <h2>Mentions</h2>
         <div id="notification-list" class="stack">
           <p class="empty">No notifications.</p>
         </div>
@@ -72,6 +81,9 @@
 
           <label for="activity-time">Start time</label>
           <input id="activity-time" required placeholder="09:30" />
+
+          <label for="activity-cost">Cost</label>
+          <input id="activity-cost" type="number" min="0" step="0.01" value="0" />
 
           <label for="activity-notes">Details</label>
           <textarea
@@ -112,7 +124,13 @@
           <button class="small delete-activity">Delete</button>
         </div>
         <p class="meta"></p>
+        <p class="cost"></p>
         <p class="notes"></p>
+        <div class="vote-row row">
+          <button class="small vote-activity">Like/Vote</button>
+          <span class="vote-count">0 votes</span>
+        </div>
+        <p class="vote-users meta"></p>
         <div class="mentions"></div>
         <form class="comment-form stack">
           <label>Comment</label>
@@ -130,5 +148,34 @@
     ></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./script.js"></script>
+
+    <div id="trip-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h2>Create New Trip</h2>
+        <form id="trip-form" class="stack">
+          <label for="trip-name">Trip name</label>
+          <input id="trip-name" required maxlength="80" placeholder="Madeira Spring 2026" />
+
+          <label for="trip-start-date">Start date</label>
+          <input id="trip-start-date" type="date" />
+
+          <label for="trip-end-date">End date</label>
+          <input id="trip-end-date" type="date" />
+
+          <label for="trip-currency">Currency</label>
+          <select id="trip-currency">
+            <option value="EUR">EUR</option>
+            <option value="USD">USD</option>
+            <option value="GBP">GBP</option>
+            <option value="CAD">CAD</option>
+          </select>
+
+          <div class="row">
+            <button type="submit">Create Trip</button>
+            <button id="close-trip-modal" type="button" class="danger">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </body>
 </html>

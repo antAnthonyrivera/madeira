@@ -1,13 +1,17 @@
 # Madeira Crew Planner
 
-Shared trip planning app for a group of 4 with realtime sync on Supabase free tier.
+Shared multi-trip planning app for a group with realtime sync on Supabase free tier.
 
 ## Features
 
-- Shared activity board (same data for all devices)
+- Multi-trip support with trip switcher
+- Shared activity board scoped to selected trip
 - Shared comments on each activity
 - `@mentions` in comments
 - Mention notifications with "Mark addressed" action
+- Voting/likes per activity
+- Cost tracking with trip budget summary
+- WMS map overlay support
 - Day picker popup calendar for date selection
 - Interactive Madeira map with pinned activities
 
@@ -23,7 +27,7 @@ Open `http://localhost:8787`.
 ## Supabase setup (required for shared sync)
 
 1. Create a free Supabase project.
-2. Go to SQL Editor and run `supabase-schema.sql`.
+2. Go to SQL Editor and run `supabase-schema.sql` (safe to re-run).
 3. In Supabase Project Settings -> API, copy:
    - Project URL
    - anon public key
@@ -35,6 +39,7 @@ After this, all teammates using the same URL and same Supabase credentials will 
 ## Team usage
 
 - Choose yourself in `Current user` (Anthony, Vivian, Jason, Darrell).
+- Create a trip from `New Trip` in the left insights panel.
 - Tag someone in a comment with `@Name`.
 - Tagged users see a notification card.
 - Notification clears when they click `Mark addressed`.
