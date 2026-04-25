@@ -26,7 +26,21 @@
 
     <main class="layout">
       <section class="panel controls">
+        <h2>Connection</h2>
+        <form id="supabase-form" class="stack">
+          <label for="supabase-url">Supabase URL</label>
+          <input id="supabase-url" placeholder="https://xyzcompany.supabase.co" />
+
+          <label for="supabase-anon-key">Supabase anon key</label>
+          <textarea id="supabase-anon-key" rows="2" placeholder="eyJhbGciOi..."></textarea>
+
+          <button type="submit">Connect Shared Board</button>
+          <p id="connection-status" class="status-text">Not connected</p>
+        </form>
+
         <h2>Team Setup</h2>
+        <label for="current-user">Current user</label>
+        <select id="current-user"></select>
         <form id="member-form" class="stack">
           <label for="member-name">Add member</label>
           <div class="row">
@@ -35,6 +49,11 @@
           </div>
         </form>
         <div id="member-list" class="chips"></div>
+
+        <h2>Mentions</h2>
+        <div id="notification-list" class="stack">
+          <p class="empty">No notifications.</p>
+        </div>
       </section>
 
       <section class="panel map-panel">
@@ -109,6 +128,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./script.js"></script>
   </body>
 </html>

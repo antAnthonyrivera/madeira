@@ -1,62 +1,52 @@
 # Madeira Crew Planner
 
-A lightweight trip-planning app for a group of 4, designed to run from your machine with no paid backend.
+Shared trip planning app for a group of 4 with realtime sync on Supabase free tier.
 
 ## Features
 
-- Activity board for each day and time
-- Notes and comments on each activity
-- `@mentions` to tag teammates in comments
+- Shared activity board (same data for all devices)
+- Shared comments on each activity
+- `@mentions` in comments
+- Mention notifications with "Mark addressed" action
+- Day picker popup calendar for date selection
 - Interactive Madeira map with pinned activities
-- Local storage persistence in browser (no cloud account required)
 
-## Run locally
-
-You can run this with Python (already present on most macOS installs):
+## Local run
 
 ```bash
 cd /Users/antalog/Cursor
 python3 -m http.server 8787
 ```
 
-Then open:
+Open `http://localhost:8787`.
 
-- On your machine: `http://localhost:8787`
-- On teammate devices on same Wi-Fi: `http://YOUR_LOCAL_IP:8787`
+## Supabase setup (required for shared sync)
 
-To find your local IP on macOS:
+1. Create a free Supabase project.
+2. Go to SQL Editor and run `supabase-schema.sql`.
+3. In Supabase Project Settings -> API, copy:
+   - Project URL
+   - anon public key
+4. Open the app and paste both values in the Connection section.
+5. Click `Connect Shared Board`.
 
-```bash
-ipconfig getifaddr en0
-```
+After this, all teammates using the same URL and same Supabase credentials will see shared updates in near realtime.
 
-If you are using Ethernet, use:
+## Team usage
 
-```bash
-ipconfig getifaddr en1
-```
+- Choose yourself in `Current user` (Anthony, Vivian, Jason, Darrell).
+- Tag someone in a comment with `@Name`.
+- Tagged users see a notification card.
+- Notification clears when they click `Mark addressed`.
 
-## Share safely with your team of 4
+## Deploy to GitHub Pages
 
-- Keep everyone on the same Wi-Fi network.
-- Confirm macOS firewall allows incoming connections for Python.
-- This app stores data in each browser's local storage; it does not sync automatically across devices.
-
-### Best workflow for group collaboration on free plan
-
-Because this version avoids paid backend services, use one of these:
-
-1. **Host-only workflow (simplest):**
-   - Only one device edits (yours).
-   - Share screen or read updates live.
-
-2. **Manual sync workflow (still free):**
-   - Use one "source of truth" device.
-   - At checkpoints, copy agreed plan text to group chat.
-
-If you want true live multi-user syncing later, we can add a free backend option (for example Supabase free tier) in a second iteration.
+1. Push the repository to GitHub.
+2. Settings -> Pages -> Deploy from a branch.
+3. Branch `main`, folder `/ (root)`.
+4. Share the generated Pages URL.
 
 ## Notes
 
-- Map tiles are loaded from OpenStreetMap over internet.
-- This app is static: `index.html`, `styles.css`, `script.js`.
+- Supabase `anon` key is safe for client use when RLS policies are in place (included in schema file).
+- This app remains static files: `index.html`, `styles.css`, `script.js`.
