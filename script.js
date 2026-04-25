@@ -1454,21 +1454,38 @@ async function ensureGeminiApiKey() {
 }
 
 async function callGemini(prompt, apiKey) {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const body = JSON.stringify({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+  });
+  const maxAttempts = 4;
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-      }),
+      body,
+    });
+    if (response.ok) {
+      const payload = await response.json();
+      const text = payload?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("\n") || "";
+      if (!text.trim()) throw new Error("Gemini returned empty response.");
+      return text;
     }
-  );
-  if (!response.ok) throw new Error(`Gemini request failed (${response.status})`);
-  const payload = await response.json();
-  const text = payload?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("\n") || "";
-  if (!text.trim()) throw new Error("Gemini returned empty response.");
-  return text;
+    if (response.status === 503 || response.status === 429) {
+      lastError = new Error(`Gemini temporarily unavailable (${response.status}).`);
+      const delayMs = 450 * Math.pow(2, attempt - 1);
+      await waitMs(delayMs);
+      continue;
+    }
+    throw new Error(`Gemini request failed (${response.status})`);
+  }
+  throw lastError || new Error("Gemini unavailable. Please try again.");
+}
+
+function waitMs(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function extractJsonPayload(rawText) {

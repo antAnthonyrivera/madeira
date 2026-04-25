@@ -63,8 +63,8 @@ body {
   background: #fff;
   color: #334155;
   border-radius: 999px;
-  width: 50px;
-  height: 50px;
+  width: 42px;
+  height: 42px;
   padding: 0;
   display: grid;
   place-items: center;
@@ -129,13 +129,13 @@ body {
 }
 
 #range-dropdown {
-  width: min(640px, 95vw);
-  padding: 1rem;
+  width: min(420px, 92vw);
+  padding: 0.7rem;
 }
 
 #notification-panel {
-  width: min(640px, 95vw);
-  padding: 1rem;
+  width: min(460px, 92vw);
+  padding: 0.7rem;
 }
 
 #selected-trip-brand {
@@ -571,13 +571,13 @@ button.small {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border: 2px solid #93c5fd;
-  border-radius: 16px;
-  padding: 0.8rem 0.95rem;
+  border: 1px solid #93c5fd;
+  border-radius: 12px;
+  padding: 0.55rem 0.7rem;
   cursor: pointer;
   color: var(--text);
   font-weight: 700;
-  font-size: 2rem;
+  font-size: 1.05rem;
   transition: transform 0.15s ease, background 0.15s ease;
 }
 
@@ -593,17 +593,17 @@ button.small {
 
 .active-pill {
   border-radius: 999px;
-  font-size: 1.15rem;
+  font-size: 0.74rem;
   font-weight: 700;
-  padding: 0.36rem 0.9rem;
+  padding: 0.14rem 0.45rem;
   background: #2563eb;
   color: #fff;
 }
 
 .trip-picker-title {
-  font-size: 2.7rem;
+  font-size: 1.55rem;
   font-weight: 800;
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.1rem;
 }
 
 .trip-list-stack {
@@ -618,11 +618,11 @@ button.small {
 .trip-feature-btn {
   width: 100%;
   border: 2px solid #bfdbfe;
-  border-radius: 16px;
+  border-radius: 12px;
   background: #eaf2fb;
   color: #0f172a;
-  padding: 0.95rem 1rem;
-  font-size: 1.05rem;
+  padding: 0.65rem 0.8rem;
+  font-size: 0.96rem;
   font-weight: 700;
   text-align: center;
   margin-bottom: 0.65rem;
@@ -662,9 +662,9 @@ button.small {
 }
 
 .dropdown-panel h3 {
-  font-size: 2.1rem;
-  font-weight: 800;
-  margin-bottom: 0.55rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
 }
 
 .dropdown-panel .small-select {
@@ -676,16 +676,16 @@ button.small {
 }
 
 #range-dropdown .row {
-  gap: 0.65rem;
+  gap: 0.45rem;
 }
 
 #range-dropdown input[type="date"] {
-  border: 2px solid #bfdbfe;
-  border-radius: 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
   background: #eef6ff;
   font-weight: 700;
   color: #1e3a8a;
-  padding: 0.75rem 0.8rem;
+  padding: 0.52rem 0.58rem;
 }
 
 #range-dropdown .meta {
@@ -694,12 +694,12 @@ button.small {
 }
 
 #range-dropdown .preset-btn {
-  border: 2px solid #bfdbfe;
-  border-radius: 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
   background: #eaf2fb;
   color: #0f172a;
   font-weight: 700;
-  padding: 0.72rem 0.95rem;
+  padding: 0.45rem 0.62rem;
 }
 
 #notification-panel .row.between {
@@ -708,34 +708,34 @@ button.small {
 
 #notification-list {
   max-height: min(52vh, 480px);
-  border: 2px solid #bfdbfe;
-  border-radius: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
   background: #f8fbff;
   padding: 0.75rem;
 }
 
 #notification-panel .notification-card {
-  border: 2px solid #bfdbfe;
-  border-radius: 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
   background: #eef6ff;
   padding: 0.75rem;
 }
 
 #notification-panel .notification-card p {
-  font-size: 1rem;
-  margin-bottom: 0.55rem;
+  font-size: 0.92rem;
+  margin-bottom: 0.4rem;
 }
 
 #notification-panel .notif-link,
 #notification-panel .notification-card button.small {
-  border-radius: 12px;
+  border-radius: 8px;
   font-weight: 700;
-  padding: 0.42rem 0.8rem;
+  padding: 0.3rem 0.6rem;
 }
 
 #notification-panel .notif-link {
   background: #f8fbff;
-  border: 2px solid #bfdbfe;
+  border: 1px solid #bfdbfe;
 }
 
 @media (max-width: 1100px) {
@@ -760,8 +760,8 @@ button.small {
   }
 
   .icon-circle-btn {
-    width: 46px;
-    height: 46px;
+    width: 40px;
+    height: 40px;
   }
 
   .dropdown-panel {
@@ -802,8 +802,8 @@ button.small {
   }
 
   .icon-circle-btn {
-    width: 42px;
-    height: 42px;
+    width: 38px;
+    height: 38px;
   }
 
   .map-only-layout {
