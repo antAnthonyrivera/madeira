@@ -1,6 +1,6 @@
 const SUPABASE_URL = "https://rwibuoccrcgrozysfwfw.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_l5KJxT_og6A7VKKK2-5MOg_wtBEDb7F";
-const GEMINI_EDGE_FUNCTION_URL = "";
+const GEMINI_EDGE_FUNCTION_URL = "https://rwibuoccrcgrozysfwfw.functions.supabase.co/gemini-proxy";
 const GEMINI_API_KEY_CACHE_KEY = "trip-planner-gemini-key";
 const DEFAULT_MEMBERS = ["Anthony", "Vivian", "Jason", "Darrell"];
 const DEFAULT_TRIP = { id: "00000000-0000-4000-8000-000000000001", name: "Madeira" };

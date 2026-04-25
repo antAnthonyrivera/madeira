@@ -36,6 +36,25 @@ Open `http://localhost:8787`.
 
 After this, all teammates using the same URL and same Supabase credentials will see shared updates in near realtime.
 
+## Gemini Edge Function setup (no client API key prompts)
+
+The app is configured to call:
+
+`https://rwibuoccrcgrozysfwfw.functions.supabase.co/gemini-proxy`
+
+Deploy the function and set secret once:
+
+```bash
+supabase login
+supabase link --project-ref rwibuoccrcgrozysfwfw
+supabase secrets set GEMINI_API_KEY=YOUR_GEMINI_KEY --project-ref rwibuoccrcgrozysfwfw
+supabase functions deploy gemini-proxy --project-ref rwibuoccrcgrozysfwfw --no-verify-jwt
+```
+
+Function source is at:
+
+`supabase/functions/gemini-proxy/index.ts`
+
 ## Team usage
 
 - Choose yourself in `Current user` (Anthony, Vivian, Jason, Darrell).
