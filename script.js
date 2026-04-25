@@ -1,7 +1,7 @@
 const STORAGE_KEY = "trip-planner-local-v4";
 const DEFAULT_MEMBERS = ["Anthony", "Vivian", "Jason", "Darrell"];
 const DEFAULT_TRIP = { id: "madeira-default", name: "Madeira" };
-const DEFAULT_WMS_URL = "https://view.eumetsat.int/geoserver/wms";
+const DEFAULT_WMS_URL = "";
 
 let map = null;
 let selectedDay = "";
@@ -10,6 +10,7 @@ let wmsDiscoveredLayers = [];
 const wmsLayerMap = new Map();
 const markerByActivityId = new Map();
 let pendingPinActivityId = null;
+let activityViewMode = "day";
 
 let state = loadState();
 
@@ -17,9 +18,15 @@ const tripSelector = document.querySelector("#trip-selector");
 const addTripButton = document.querySelector("#add-trip-btn");
 const notificationList = document.querySelector("#notification-list");
 const selectedDayInput = document.querySelector("#selected-day");
+const rangeStartInput = document.querySelector("#range-start");
+const rangeEndInput = document.querySelector("#range-end");
 const weatherForecast = document.querySelector("#weather-forecast");
 const mapWeatherBadge = document.querySelector("#map-weather-badge");
 const dailyActivityList = document.querySelector("#daily-activity-list");
+const rangeActivityList = document.querySelector("#range-activity-list");
+const rangeControls = document.querySelector("#range-controls");
+const activityViewDayButton = document.querySelector("#activity-view-day");
+const activityViewRangeButton = document.querySelector("#activity-view-range");
 const notificationFilter = document.querySelector("#notification-filter");
 const clearDataButton = document.querySelector("#clear-data");
 const activeLayerList = document.querySelector("#active-layer-list");
@@ -60,9 +67,13 @@ init();
 function init() {
   setupMap();
   setupHandlers();
-  wmsUrlInput.value = DEFAULT_WMS_URL;
+  if (DEFAULT_WMS_URL) {
+    wmsUrlInput.value = DEFAULT_WMS_URL;
+  }
   selectedDayInput.value = todayIso();
   selectedDay = selectedDayInput.value;
+  rangeStartInput.value = selectedDay;
+  rangeEndInput.value = selectedDay;
   updateWeatherForecast();
   renderAll();
 }
@@ -96,6 +107,22 @@ function setupHandlers() {
     selectedDay = selectedDayInput.value;
     updateWeatherForecast();
     renderDailyActivities();
+    renderRangeActivities();
+  });
+
+  rangeStartInput.addEventListener("change", () => {
+    renderRangeActivities();
+  });
+
+  rangeEndInput.addEventListener("change", () => {
+    renderRangeActivities();
+  });
+
+  activityViewDayButton.addEventListener("click", () => {
+    setActivityViewMode("day");
+  });
+  activityViewRangeButton.addEventListener("click", () => {
+    setActivityViewMode("range");
   });
 
   notificationFilter.addEventListener("change", () => {
@@ -171,6 +198,8 @@ function setupHandlers() {
     activityForm.reset();
     selectedDayInput.value = activity.day;
     selectedDay = activity.day;
+    rangeStartInput.value = activity.day;
+    rangeEndInput.value = activity.day;
     setActivityLocStatus("", "");
     renderAll();
   });
@@ -180,6 +209,8 @@ function setupHandlers() {
     state = defaultState();
     selectedDayInput.value = todayIso();
     selectedDay = selectedDayInput.value;
+    rangeStartInput.value = selectedDay;
+    rangeEndInput.value = selectedDay;
     wmsLayerMap.forEach((entry) => map.removeLayer(entry.layer));
     wmsLayerMap.clear();
     saveState();
@@ -189,11 +220,30 @@ function setupHandlers() {
 
 function renderAll() {
   renderTripSelector();
-  renderDailyActivities();
   renderNotifications();
   renderMapPins();
   renderActiveLayersPanel();
+  renderActivityView();
   updateWeatherForecast();
+}
+
+function renderActivityView() {
+  const isRange = activityViewMode === "range";
+  activityViewDayButton.classList.toggle("active", !isRange);
+  activityViewRangeButton.classList.toggle("active", isRange);
+  rangeControls.classList.toggle("hidden", !isRange);
+  dailyActivityList.classList.toggle("hidden", isRange);
+  rangeActivityList.classList.toggle("hidden", !isRange);
+  if (isRange) {
+    renderRangeActivities();
+    return;
+  }
+  renderDailyActivities();
+}
+
+function setActivityViewMode(mode) {
+  activityViewMode = mode === "range" ? "range" : "day";
+  renderActivityView();
 }
 
 function renderTripSelector() {
@@ -240,6 +290,7 @@ function renderDailyActivities() {
   filtered.forEach((activity) => {
     const card = document.createElement("article");
     card.className = "layer-item";
+    card.dataset.activityId = activity.id;
     const activityWeather = getActivityWeatherSnapshot(activity);
     const weatherClass = weatherClassForCode(activityWeather?.weatherCode ?? selectedDayWeather?.weatherCode);
     const weatherStrip = document.createElement("div");
@@ -285,6 +336,45 @@ function renderDailyActivities() {
   });
 }
 
+function renderRangeActivities() {
+  rangeActivityList.innerHTML = "";
+  const start = normalizeDayForSort(rangeStartInput.value || selectedDay);
+  const end = normalizeDayForSort(rangeEndInput.value || selectedDay);
+  const low = start <= end ? start : end;
+  const high = start <= end ? end : start;
+
+  const filtered = state.activities
+    .filter((activity) => activity.tripId === state.currentTripId)
+    .filter((activity) => {
+      const day = normalizeDayForSort(activity.day);
+      return day >= low && day <= high;
+    })
+    .sort(compareActivitiesByDayThenTime);
+
+  if (!filtered.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "No scheduled activities in selected range.";
+    rangeActivityList.appendChild(empty);
+    return;
+  }
+
+  filtered.forEach((activity) => {
+    const card = document.createElement("article");
+    card.className = "layer-item";
+    card.dataset.activityId = activity.id;
+    const heading = document.createElement("p");
+    heading.innerHTML = `<strong>${activity.category} ${escapeHtml(activity.title)}</strong>`;
+    const meta = document.createElement("p");
+    meta.className = "meta";
+    meta.textContent = `${formatDayDisplay(activity.day)} at ${activity.time}${
+      activity.location ? ` • ${activity.location}` : ""
+    }`;
+    card.append(heading, meta);
+    rangeActivityList.appendChild(card);
+  });
+}
+
 function renderNotifications() {
   notificationList.innerHTML = "";
   const unhandled = getUnhandledNotificationsForCurrentTrip().filter((notification) => {
@@ -308,6 +398,25 @@ function renderNotifications() {
       card.className = "notification-card";
       const message = document.createElement("p");
       message.textContent = `${notification.userName} was tagged on ${activity ? activity.title : "an activity"}.`;
+      const jumpButton = document.createElement("button");
+      jumpButton.type = "button";
+      jumpButton.className = "notif-link";
+      jumpButton.textContent = "Go to activity";
+      jumpButton.addEventListener("click", () => {
+        if (!activity) return;
+        selectedDay = activity.day;
+        selectedDayInput.value = activity.day;
+        rangeStartInput.value = activity.day;
+        rangeEndInput.value = activity.day;
+        if (activity.pinHidden && Number.isFinite(activity.lat) && Number.isFinite(activity.lng)) {
+          activity.pinHidden = false;
+          saveState();
+        }
+        setActivityViewMode("day");
+        renderAll();
+        focusActivityCard(activity.id);
+        openActivityPopup(activity);
+      });
       const button = document.createElement("button");
       button.className = "small";
       button.textContent = "Mark addressed";
@@ -316,9 +425,27 @@ function renderNotifications() {
         saveState();
         renderNotifications();
       });
-      card.append(message, button);
+      card.append(message, jumpButton, button);
       notificationList.appendChild(card);
     });
+}
+
+function focusActivityCard(activityId) {
+  const selector = `[data-activity-id="${activityId}"]`;
+  const card = dailyActivityList.querySelector(selector) || rangeActivityList.querySelector(selector);
+  if (!card) return;
+  card.classList.add("activity-row-highlight");
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  window.setTimeout(() => card.classList.remove("activity-row-highlight"), 1600);
+}
+
+function openActivityPopup(activity) {
+  if (!activity) return;
+  if (!Number.isFinite(activity.lat) || !Number.isFinite(activity.lng)) return;
+  const marker = markerByActivityId.get(activity.id);
+  if (!marker) return;
+  map.setView([activity.lat, activity.lng], Math.max(map.getZoom(), 12));
+  marker.openPopup();
 }
 
 function renderMapPins() {

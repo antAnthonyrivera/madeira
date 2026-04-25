@@ -340,9 +340,14 @@ button.small {
 }
 
 #daily-activity-list,
+#range-activity-list {
+  max-height: 31vh;
+  overflow: auto;
+}
+
 #notification-list,
 #active-layer-list {
-  max-height: 26vh;
+  max-height: 18vh;
   overflow: auto;
 }
 
@@ -368,6 +373,35 @@ button.small {
   display: flex;
   gap: 0.35rem;
   margin-top: 0.4rem;
+}
+
+.activity-row-highlight {
+  outline: 2px solid #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.notif-link {
+  background: transparent;
+  border: none;
+  color: #1d4ed8;
+  text-decoration: underline;
+  padding: 0;
+  cursor: pointer;
+}
+
+.activity-view-tabs {
+  gap: 0.4rem;
+  margin-top: -0.2rem;
+}
+
+.tab-btn {
+  min-width: 68px;
+}
+
+.tab-btn.active {
+  background: #1d4ed8;
+  color: #fff;
+  border-color: #1d4ed8;
 }
 
 .icon-btn {

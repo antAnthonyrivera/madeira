@@ -42,6 +42,14 @@
           <label for="selected-day">Selected day</label>
           <input id="selected-day" type="date" />
         </div>
+        <div id="range-controls" class="stack hidden">
+          <label for="range-start">Activity range</label>
+          <div class="row">
+            <input id="range-start" type="date" />
+            <span class="meta">to</span>
+            <input id="range-end" type="date" />
+          </div>
+        </div>
         <div id="weather-forecast" class="weather-box">
           <p class="meta">Weather forecast loading...</p>
         </div>
@@ -49,9 +57,16 @@
           <h3>Activities</h3>
           <button id="clear-data" class="danger small">Reset</button>
         </div>
+        <div class="row activity-view-tabs">
+          <button id="activity-view-day" type="button" class="small tab-btn active">Day</button>
+          <button id="activity-view-range" type="button" class="small tab-btn">Range</button>
+        </div>
 
         <div id="daily-activity-list" class="stack section-list">
           <p class="empty">No activities for selected day.</p>
+        </div>
+        <div id="range-activity-list" class="stack section-list hidden">
+          <p class="empty">No scheduled activities in selected range.</p>
         </div>
 
         <div class="section-divider"></div>
@@ -82,7 +97,7 @@
         </div>
         <div class="stack">
           <label for="wms-url-input">WMS URL</label>
-          <input id="wms-url-input" value="https://view.eumetsat.int/geoserver/wms" />
+          <input id="wms-url-input" placeholder="Enter WMS URL" />
           <button id="load-wms-layers" type="button">Load Layers</button>
           <p id="wms-error" class="status-text warn hidden"></p>
         </div>
