@@ -385,7 +385,7 @@ function renderDailyActivities() {
 
   filtered.forEach((activity) => {
     const card = document.createElement("article");
-    card.className = "layer-item";
+    card.className = "layer-item activity-openable";
     card.dataset.activityId = activity.id;
     const activityWeather = getActivityWeatherSnapshot(activity);
     const accentStrip = document.createElement("div");
@@ -409,27 +409,20 @@ function renderDailyActivities() {
     confidence.textContent = `Weather confidence: ${weatherConfidenceLabel(activityWeather)}`;
     const actions = document.createElement("div");
     actions.className = "activity-row-actions";
-    const mapPinButton = document.createElement("button");
-    mapPinButton.type = "button";
-    mapPinButton.className = "icon-btn";
-    mapPinButton.textContent = "Map Pin";
-    mapPinButton.addEventListener("click", () => {
+    const setPinButton = document.createElement("button");
+    setPinButton.type = "button";
+    setPinButton.className = "icon-btn";
+    setPinButton.textContent = "Set Pin";
+    setPinButton.addEventListener("click", (event) => {
+      event.stopPropagation();
       pendingPinActivityId = activity.id;
-      if (Number.isFinite(activity.lat) && Number.isFinite(activity.lng)) {
-        activity.pinHidden = false;
-        saveState();
-        renderAll();
-        openActivityPopup(activity);
-      }
+      map.setView([32.7607, -16.9595], Math.max(map.getZoom(), 10));
+      setActivityLocStatus("Click on the map to set this pin.", "ok");
     });
-    const editButton = document.createElement("button");
-    editButton.type = "button";
-    editButton.className = "icon-btn";
-    editButton.textContent = "Edit";
-    editButton.addEventListener("click", () => {
+    actions.append(setPinButton);
+    card.addEventListener("click", () => {
       openActivityModalForEdit(activity.id);
     });
-    actions.append(mapPinButton, editButton);
     card.append(accentStrip, heading, meta, notes, tags, confidence, actions);
     dailyActivityList.appendChild(card);
   });
