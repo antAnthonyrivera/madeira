@@ -15,11 +15,60 @@
   </head>
   <body>
     <header class="app-header">
-      <h1>Trip Planner</h1>
-      <div class="row">
-        <label for="trip-selector"><strong>Trip:</strong></label>
-        <select id="trip-selector"></select>
-        <button id="add-trip-btn" type="button" class="small">New Trip</button>
+      <div class="header-left stack">
+        <div class="row">
+          <h1>Trip Planner</h1>
+          <label for="trip-selector"><strong>Trip:</strong></label>
+          <select id="trip-selector"></select>
+          <button id="add-trip-btn" type="button" class="small">New Trip</button>
+        </div>
+        <div id="range-controls" class="stack">
+          <label for="range-start">Activity range</label>
+          <div class="row preset-row">
+            <button id="preset-today" type="button" class="small preset-btn">Today</button>
+            <button id="preset-weekend" type="button" class="small preset-btn">This weekend</button>
+            <button id="preset-whole-trip" type="button" class="small preset-btn">Whole trip</button>
+          </div>
+          <div class="row">
+            <input id="range-start" type="date" />
+            <span class="meta">to</span>
+            <input id="range-end" type="date" />
+          </div>
+        </div>
+      </div>
+      <div class="header-right stack">
+        <div id="weather-forecast" class="weather-box header-weather">
+          <p class="meta">Weather forecast loading...</p>
+        </div>
+        <div class="header-notification-wrap">
+          <button id="notification-bell" type="button" class="bell-btn" aria-label="Notifications">
+            <svg
+              class="bell-icon"
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                d="M12 22a2.75 2.75 0 0 0 2.58-1.8H9.42A2.75 2.75 0 0 0 12 22Zm7-4.3h-1.1v-6.05a5.9 5.9 0 0 0-4.7-5.78V5.2a1.2 1.2 0 1 0-2.4 0v.67a5.9 5.9 0 0 0-4.7 5.78v6.05H5a1 1 0 0 0 0 2h14a1 1 0 1 0 0-2Z"
+              />
+            </svg>
+            <span id="notification-dot" class="notif-dot hidden">0</span>
+          </button>
+          <div id="notification-panel" class="notification-panel hidden">
+            <div class="row between tight-bottom">
+              <h3>Notifications</h3>
+              <select id="notification-filter" class="small-select">
+                <option value="all">All</option>
+                <option value="mine">Assigned to me</option>
+              </select>
+            </div>
+            <div id="notification-list" class="stack section-list">
+              <p class="empty">No notifications.</p>
+            </div>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -38,22 +87,6 @@
         </div>
 
         <div class="section-divider"></div>
-        <div id="range-controls" class="stack">
-          <label for="range-start">Activity range</label>
-          <div class="row preset-row">
-            <button id="preset-today" type="button" class="small preset-btn">Today</button>
-            <button id="preset-weekend" type="button" class="small preset-btn">This weekend</button>
-            <button id="preset-whole-trip" type="button" class="small preset-btn">Whole trip</button>
-          </div>
-          <div class="row">
-            <input id="range-start" type="date" />
-            <span class="meta">to</span>
-            <input id="range-end" type="date" />
-          </div>
-        </div>
-        <div id="weather-forecast" class="weather-box">
-          <p class="meta">Weather forecast loading...</p>
-        </div>
         <div class="row between tight-bottom">
           <h3 id="activities-title">Activities (0)</h3>
           <button id="clear-data" class="danger small">Reset</button>
@@ -61,18 +94,6 @@
 
         <div id="daily-activity-list" class="stack section-list">
           <p class="empty">No activities for selected day.</p>
-        </div>
-
-        <div class="section-divider"></div>
-        <div class="row between tight-bottom">
-          <h3>Notifications</h3>
-          <select id="notification-filter" class="small-select">
-            <option value="all">All</option>
-            <option value="mine">Assigned to me</option>
-          </select>
-        </div>
-        <div id="notification-list" class="stack section-list">
-          <p class="empty">No notifications.</p>
         </div>
 
         <div class="section-divider"></div>

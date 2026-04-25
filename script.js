@@ -23,6 +23,9 @@ const mapWeatherBadge = document.querySelector("#map-weather-badge");
 const dailyActivityList = document.querySelector("#daily-activity-list");
 const activitiesTitle = document.querySelector("#activities-title");
 const notificationFilter = document.querySelector("#notification-filter");
+const notificationBell = document.querySelector("#notification-bell");
+const notificationDot = document.querySelector("#notification-dot");
+const notificationPanel = document.querySelector("#notification-panel");
 const clearDataButton = document.querySelector("#clear-data");
 const activeLayerList = document.querySelector("#active-layer-list");
 const presetTodayButton = document.querySelector("#preset-today");
@@ -120,6 +123,14 @@ function setupHandlers() {
 
   notificationFilter.addEventListener("change", () => {
     renderNotifications();
+  });
+  notificationBell.addEventListener("click", () => {
+    notificationPanel.classList.toggle("hidden");
+  });
+  document.addEventListener("click", (event) => {
+    if (notificationPanel.classList.contains("hidden")) return;
+    if (notificationPanel.contains(event.target) || notificationBell.contains(event.target)) return;
+    notificationPanel.classList.add("hidden");
   });
 
   tripSelector.addEventListener("change", () => {
@@ -321,7 +332,10 @@ function renderDailyActivities() {
 
 function renderNotifications() {
   notificationList.innerHTML = "";
-  const unhandled = getUnhandledNotificationsForCurrentTrip().filter((notification) => {
+  const allUnhandled = getUnhandledNotificationsForCurrentTrip();
+  notificationDot.textContent = allUnhandled.length > 99 ? "99+" : String(allUnhandled.length);
+  notificationDot.classList.toggle("hidden", allUnhandled.length === 0);
+  const unhandled = allUnhandled.filter((notification) => {
     if (notificationFilter.value === "mine") {
       return notification.userName === DEFAULT_MEMBERS[0];
     }
