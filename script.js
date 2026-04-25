@@ -1,7 +1,7 @@
 const SUPABASE_URL = "https://rwibuoccrcgrozysfwfw.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_l5KJxT_og6A7VKKK2-5MOg_wtBEDb7F";
 const DEFAULT_MEMBERS = ["Anthony", "Vivian", "Jason", "Darrell"];
-const DEFAULT_TRIP = { id: "madeira-default", name: "Madeira" };
+const DEFAULT_TRIP = { id: "00000000-0000-4000-8000-000000000001", name: "Madeira" };
 const DEFAULT_WMS_URL = "";
 
 let map = null;
@@ -103,6 +103,7 @@ async function init() {
   selectedDay = todayIso();
   rangeStartInput.value = selectedDay;
   rangeEndInput.value = selectedDay;
+  ensureValidTripIds();
   await bootstrapRemoteState();
   await refreshStateFromRemote();
   setupRealtimeSubscriptions();
@@ -805,6 +806,47 @@ function defaultState() {
     activities: [],
     notifications: [],
   };
+}
+
+function ensureValidTripIds() {
+  const tripIdMap = new Map();
+  state.trips = (state.trips || []).map((trip, index) => {
+    const rawId = String(trip?.id || "").trim();
+    if (isUuid(rawId)) return { id: rawId, name: trip?.name || `Trip ${index + 1}` };
+    const replacement = crypto.randomUUID();
+    tripIdMap.set(rawId, replacement);
+    return { id: replacement, name: trip?.name || `Trip ${index + 1}` };
+  });
+  if (!state.trips.length) {
+    state.trips = [{ ...DEFAULT_TRIP }];
+  }
+  const rawCurrentTripId = String(state.currentTripId || "").trim();
+  if (tripIdMap.has(rawCurrentTripId)) {
+    state.currentTripId = tripIdMap.get(rawCurrentTripId);
+  }
+  if (!state.trips.some((trip) => trip.id === state.currentTripId)) {
+    state.currentTripId = state.trips[0].id;
+  }
+  state.activities = (state.activities || []).map((activity) => {
+    const rawTripId = String(activity.tripId || "").trim();
+    return {
+      ...activity,
+      tripId: tripIdMap.get(rawTripId) || (isUuid(rawTripId) ? rawTripId : state.currentTripId),
+    };
+  });
+  state.notifications = (state.notifications || []).map((notification) => {
+    const rawTripId = String(notification.tripId || "").trim();
+    return {
+      ...notification,
+      tripId: tripIdMap.get(rawTripId) || (isUuid(rawTripId) ? rawTripId : state.currentTripId),
+    };
+  });
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || "").trim()
+  );
 }
 
 function loadState() {
