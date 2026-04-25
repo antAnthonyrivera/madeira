@@ -31,30 +31,23 @@
           <div class="fab-stack">
             <button id="map-add-menu-toggle" class="fab" type="button" title="Add">+</button>
             <div id="map-add-menu" class="fab-menu hidden">
-              <button id="open-wms-modal" type="button" class="small">Add Layer</button>
               <button id="open-activity-modal" type="button" class="small">Add Activity</button>
+              <button id="open-wms-modal" type="button" class="small">Add Layer</button>
             </div>
           </div>
-
-          <section class="active-layers">
-            <div class="row between tight-bottom">
-              <h3>Map Layers</h3>
-              <button id="clear-data" class="danger small">Reset</button>
-            </div>
-            <div id="active-layer-list" class="stack">
-              <p class="empty">No WMS layers active.</p>
-            </div>
-          </section>
         </div>
       </section>
 
       <section class="panel side-panel">
+        <div class="row between tight-bottom">
+          <h3>Activities</h3>
+          <button id="clear-data" class="danger small">Reset</button>
+        </div>
         <div class="stack">
           <label for="selected-day">Selected day</label>
           <input id="selected-day" type="date" />
         </div>
 
-        <h3>Daily Activities</h3>
         <div id="daily-activity-list" class="stack">
           <p class="empty">No activities for selected day.</p>
         </div>
@@ -70,8 +63,10 @@
           <p class="empty">No notifications.</p>
         </div>
 
-        <h3>Team Members</h3>
-        <div id="member-list" class="chips"></div>
+        <h3>Layers</h3>
+        <div id="active-layer-list" class="stack">
+          <p class="empty">No WMS layers active.</p>
+        </div>
       </section>
     </main>
 
@@ -146,10 +141,7 @@
           <label for="activity-lng">Longitude</label>
           <input id="activity-lng" placeholder="-17.1462" />
 
-          <div class="row">
-            <button type="button" id="place-on-map" class="small">Pick on Map</button>
-            <span id="activity-loc-status" class="status-text"></span>
-          </div>
+          <span id="activity-loc-status" class="status-text"></span>
 
           <button type="submit">Save Activity</button>
         </form>

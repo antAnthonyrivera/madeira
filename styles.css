@@ -56,8 +56,16 @@ h2 {
 .map-only-layout {
   padding: 1rem;
   display: grid;
-  grid-template-columns: 1.45fr 0.8fr;
+  grid-template-columns: 0.82fr 1.45fr;
   gap: 1rem;
+}
+
+.side-panel {
+  grid-column: 1;
+}
+
+.map-panel {
+  grid-column: 2;
 }
 
 .map-wrap {
@@ -320,7 +328,8 @@ button.small {
 }
 
 #daily-activity-list,
-#notification-list {
+#notification-list,
+#active-layer-list {
   max-height: 26vh;
   overflow: auto;
 }
@@ -335,9 +344,37 @@ button.small {
   padding-right: 1rem;
 }
 
+#activity-modal .stack {
+  gap: 0.4rem;
+}
+
+#activity-modal h2 {
+  margin-bottom: 0.35rem;
+}
+
+.activity-row-actions {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.icon-btn {
+  border: 1px solid var(--line);
+  background: #f8fbff;
+  color: #123b80;
+  border-radius: 6px;
+  padding: 0.2rem 0.45rem;
+  cursor: pointer;
+}
+
 @media (max-width: 1100px) {
   .map-only-layout {
     grid-template-columns: 1fr;
+  }
+
+  .side-panel,
+  .map-panel {
+    grid-column: auto;
   }
 
   .map-wrap {

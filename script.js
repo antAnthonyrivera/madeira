@@ -4,17 +4,16 @@ const DEFAULT_TRIP = { id: "madeira-default", name: "Madeira" };
 const DEFAULT_WMS_URL = "https://view.eumetsat.int/geoserver/wms";
 
 let map = null;
-let mapPickMode = false;
 let selectedDay = "";
 let wmsDiscoveredLayers = [];
 const wmsLayerMap = new Map();
 const markerByActivityId = new Map();
+let pendingPinActivityId = null;
 
 let state = loadState();
 
 const tripSelector = document.querySelector("#trip-selector");
 const addTripButton = document.querySelector("#add-trip-btn");
-const memberList = document.querySelector("#member-list");
 const notificationList = document.querySelector("#notification-list");
 const selectedDayInput = document.querySelector("#selected-day");
 const dailyActivityList = document.querySelector("#daily-activity-list");
@@ -42,7 +41,6 @@ const closeActivityModalButton = document.querySelector("#close-activity-modal")
 const activityForm = document.querySelector("#activity-form");
 const activityTagsHost = document.querySelector("#activity-tags");
 const geocodeAddressButton = document.querySelector("#geocode-address");
-const placeOnMapButton = document.querySelector("#place-on-map");
 const activityLocStatus = document.querySelector("#activity-loc-status");
 
 const fields = {
@@ -76,13 +74,17 @@ function setupMap() {
   }).addTo(map);
 
   map.on("click", (event) => {
-    if (!mapPickMode) return;
+    if (!pendingPinActivityId) return;
     const { lat, lng } = event.latlng;
-    fields.lat.value = lat.toFixed(5);
-    fields.lng.value = lng.toFixed(5);
-    setActivityLocStatus(`Pinned ${lat.toFixed(5)}, ${lng.toFixed(5)}`, "ok");
-    mapPickMode = false;
-    placeOnMapButton.textContent = "Pick on Map";
+    const target = state.activities.find((activity) => activity.id === pendingPinActivityId);
+    if (target) {
+      target.lat = Number(lat.toFixed(5));
+      target.lng = Number(lng.toFixed(5));
+      target.pinHidden = false;
+      saveState();
+      renderAll();
+    }
+    pendingPinActivityId = null;
   });
 }
 
@@ -147,22 +149,12 @@ function setupHandlers() {
   });
   closeActivityModalButton.addEventListener("click", () => {
     activityModal.classList.add("hidden");
-    mapPickMode = false;
-    placeOnMapButton.textContent = "Pick on Map";
   });
 
   fields.day.addEventListener("click", openDayPicker);
   fields.day.addEventListener("focus", openDayPicker);
 
   geocodeAddressButton.addEventListener("click", geocodeAddress);
-  placeOnMapButton.addEventListener("click", () => {
-    mapPickMode = !mapPickMode;
-    placeOnMapButton.textContent = mapPickMode ? "Click map to set point" : "Pick on Map";
-    if (mapPickMode) {
-      setActivityLocStatus("Click on the map to set coordinates.", "");
-    }
-  });
-
   activityForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const activity = {
@@ -178,6 +170,7 @@ function setupHandlers() {
       lat: Number.isFinite(Number(fields.lat.value)) ? Number(fields.lat.value) : null,
       lng: Number.isFinite(Number(fields.lng.value)) ? Number(fields.lng.value) : null,
       taggedMembers: selectedTaggedMembers(),
+      pinHidden: false,
       createdAt: new Date().toISOString(),
     };
     if (!activity.title || !activity.day || !activity.time) return;
@@ -186,8 +179,6 @@ function setupHandlers() {
     saveState();
     activityModal.classList.add("hidden");
     activityForm.reset();
-    mapPickMode = false;
-    placeOnMapButton.textContent = "Pick on Map";
     selectedDayInput.value = activity.day;
     selectedDay = activity.day;
     setActivityLocStatus("", "");
@@ -208,7 +199,6 @@ function setupHandlers() {
 
 function renderAll() {
   renderTripSelector();
-  renderMembers();
   renderDailyActivities();
   renderNotifications();
   renderMapPins();
@@ -223,18 +213,6 @@ function renderTripSelector() {
     option.textContent = trip.name;
     if (trip.id === state.currentTripId) option.selected = true;
     tripSelector.appendChild(option);
-  });
-}
-
-function renderMembers() {
-  memberList.innerHTML = "";
-  const counts = countUnhandledByMember();
-  state.members.forEach((member) => {
-    const chip = document.createElement("span");
-    chip.className = "chip";
-    const count = counts.get(member) || 0;
-    chip.textContent = count > 0 ? `${member} (${count})` : member;
-    memberList.appendChild(chip);
   });
 }
 
@@ -285,7 +263,26 @@ function renderDailyActivities() {
     tags.textContent = activity.taggedMembers.length
       ? `Tagged: ${activity.taggedMembers.join(", ")}`
       : "Tagged: none";
-    card.append(heading, meta, notes, tags);
+    const actions = document.createElement("div");
+    actions.className = "activity-row-actions";
+    const pinToggle = document.createElement("button");
+    pinToggle.type = "button";
+    pinToggle.className = "icon-btn";
+    pinToggle.textContent = activity.pinHidden ? "Show Pin" : "Hide Pin";
+    pinToggle.addEventListener("click", () => {
+      activity.pinHidden = !activity.pinHidden;
+      saveState();
+      renderAll();
+    });
+    const setPin = document.createElement("button");
+    setPin.type = "button";
+    setPin.className = "icon-btn";
+    setPin.textContent = "Set Pin";
+    setPin.addEventListener("click", () => {
+      pendingPinActivityId = activity.id;
+    });
+    actions.append(pinToggle, setPin);
+    card.append(heading, meta, notes, tags, actions);
     dailyActivityList.appendChild(card);
   });
 }
@@ -331,8 +328,15 @@ function renderMapPins() {
   markerByActivityId.clear();
   state.activities.forEach((activity) => {
     if (activity.tripId !== state.currentTripId) return;
+    if (activity.pinHidden) return;
     if (!Number.isFinite(activity.lat) || !Number.isFinite(activity.lng)) return;
-    const marker = L.marker([activity.lat, activity.lng]).addTo(map);
+    const marker = L.circleMarker([activity.lat, activity.lng], {
+      radius: 8,
+      color: "#0f172a",
+      weight: 1,
+      fillColor: pinColorForCategory(activity.category),
+      fillOpacity: 0.92,
+    }).addTo(map);
     marker.bindPopup(
       `<strong>${escapeHtml(activity.title)}</strong><br>${escapeHtml(formatDayDisplay(activity.day))} ${escapeHtml(
         activity.time
@@ -363,8 +367,6 @@ async function geocodeAddress() {
     fields.lng.value = lng.toFixed(5);
     fields.location.value = fields.location.value || data[0].display_name.split(",")[0];
     map.setView([lat, lng], 12);
-    if (tempPickMarker) tempPickMarker.remove();
-    tempPickMarker = L.marker([lat, lng]).addTo(map).bindPopup("Geocoded location").openPopup();
     setActivityLocStatus(`Address resolved: ${lat.toFixed(5)}, ${lng.toFixed(5)}`, "ok");
   } catch (error) {
     setActivityLocStatus(error.message || "Unable to geocode address.", "warn");
@@ -549,15 +551,6 @@ function getUnhandledNotificationsForCurrentTrip() {
   );
 }
 
-function countUnhandledByMember() {
-  const counts = new Map();
-  state.members.forEach((member) => counts.set(member, 0));
-  getUnhandledNotificationsForCurrentTrip().forEach((notification) => {
-    counts.set(notification.userName, (counts.get(notification.userName) || 0) + 1);
-  });
-  return counts;
-}
-
 function defaultState() {
   return {
     trips: [DEFAULT_TRIP],
@@ -582,7 +575,11 @@ function loadState() {
       trips,
       currentTripId,
       members: parsed.members.length ? parsed.members : [...DEFAULT_MEMBERS],
-      activities: parsed.activities.map((activity) => ({ ...activity, tripId: activity.tripId || currentTripId })),
+      activities: parsed.activities.map((activity) => ({
+        ...activity,
+        tripId: activity.tripId || currentTripId,
+        pinHidden: Boolean(activity.pinHidden),
+      })),
       notifications: Array.isArray(parsed.notifications)
         ? parsed.notifications.map((item) => ({ ...item, tripId: item.tripId || currentTripId }))
         : [],
@@ -655,4 +652,23 @@ function scoreLayer(layer) {
   if (text.includes("mask")) score += 2;
   if (text.includes("top")) score += 1;
   return score;
+}
+
+function pinColorForCategory(category) {
+  switch (category) {
+    case "🏔️":
+      return "#8b5cf6";
+    case "🏖️":
+      return "#0ea5e9";
+    case "🍽️":
+      return "#f97316";
+    case "🚗":
+      return "#64748b";
+    case "🌅":
+      return "#f43f5e";
+    case "📸":
+      return "#22c55e";
+    default:
+      return "#2563eb";
+  }
 }
