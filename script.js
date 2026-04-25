@@ -14,7 +14,8 @@ let state = loadState();
 
 const currentUserSelect = document.querySelector("#current-user");
 const memberList = document.querySelector("#member-list");
-const tripName = document.querySelector("#trip-name");
+const tripSelector = document.querySelector("#trip-selector");
+const addTripButton = document.querySelector("#add-trip-btn");
 const notificationList = document.querySelector("#notification-list");
 const selectedDayInput = document.querySelector("#selected-day");
 const dailyActivityList = document.querySelector("#daily-activity-list");
@@ -47,7 +48,6 @@ const fields = {
 init();
 
 function init() {
-  tripName.textContent = DEFAULT_TRIP.name;
   setupMap();
   setupHandlers();
   selectedDayInput.value = todayIso();
@@ -90,6 +90,22 @@ function setupHandlers() {
     renderNotifications();
   });
 
+  tripSelector.addEventListener("change", () => {
+    state.currentTripId = tripSelector.value;
+    saveState();
+    renderAll();
+  });
+
+  addTripButton.addEventListener("click", () => {
+    const name = window.prompt("Trip name");
+    if (!name || !name.trim()) return;
+    const trip = { id: crypto.randomUUID(), name: name.trim() };
+    state.trips.push(trip);
+    state.currentTripId = trip.id;
+    saveState();
+    renderAll();
+  });
+
   openWmsModalButton.addEventListener("click", () => {
     resetWmsModalState();
     wmsModal.classList.remove("hidden");
@@ -107,6 +123,7 @@ function setupHandlers() {
     event.preventDefault();
     const activity = {
       id: crypto.randomUUID(),
+      tripId: state.currentTripId,
       title: fields.title.value.trim(),
       day: fields.day.value.trim(),
       time: fields.time.value.trim(),
@@ -145,6 +162,7 @@ function setupHandlers() {
 }
 
 function renderAll() {
+  renderTripSelector();
   renderCurrentUserOptions();
   renderMembers();
   renderTagMemberCheckboxes();
@@ -152,6 +170,17 @@ function renderAll() {
   renderNotifications();
   renderMapPins();
   renderActiveLayersPanel();
+}
+
+function renderTripSelector() {
+  tripSelector.innerHTML = "";
+  state.trips.forEach((trip) => {
+    const option = document.createElement("option");
+    option.value = trip.id;
+    option.textContent = trip.name;
+    if (trip.id === state.currentTripId) option.selected = true;
+    tripSelector.appendChild(option);
+  });
 }
 
 function renderCurrentUserOptions() {
@@ -193,6 +222,7 @@ function renderTagMemberCheckboxes() {
 function renderDailyActivities() {
   dailyActivityList.innerHTML = "";
   const filtered = state.activities
+    .filter((activity) => activity.tripId === state.currentTripId)
     .filter((activity) => !selectedDay || activity.day === selectedDay)
     .sort(compareActivitiesByDayThenTime);
   if (!filtered.length) {
@@ -227,7 +257,10 @@ function renderDailyActivities() {
 function renderNotifications() {
   notificationList.innerHTML = "";
   const unhandled = state.notifications.filter(
-    (notification) => notification.userName === state.activeUser && !notification.handled
+    (notification) =>
+      notification.userName === state.activeUser &&
+      !notification.handled &&
+      notification.tripId === state.currentTripId
   );
   if (!unhandled.length) {
     const empty = document.createElement("p");
@@ -263,6 +296,7 @@ function renderMapPins() {
   markerByActivityId.forEach((marker) => marker.remove());
   markerByActivityId.clear();
   state.activities.forEach((activity) => {
+    if (activity.tripId !== state.currentTripId) return;
     if (!Number.isFinite(activity.lat) || !Number.isFinite(activity.lng)) return;
     const marker = L.marker([activity.lat, activity.lng]).addTo(map);
     marker.bindPopup(
@@ -421,6 +455,7 @@ function createTagNotifications(activity) {
         userName,
         fromUser: state.activeUser,
         activityId: activity.id,
+        tripId: activity.tripId,
         handled: false,
         createdAt: new Date().toISOString(),
       });
@@ -429,7 +464,8 @@ function createTagNotifications(activity) {
 
 function defaultState() {
   return {
-    trip: DEFAULT_TRIP,
+    trips: [DEFAULT_TRIP],
+    currentTripId: DEFAULT_TRIP.id,
     members: [...DEFAULT_MEMBERS],
     activeUser: DEFAULT_MEMBERS[0],
     activities: [],
@@ -443,12 +479,25 @@ function loadState() {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed.activities) || !Array.isArray(parsed.members)) return defaultState();
+    const trips = Array.isArray(parsed.trips) && parsed.trips.length ? parsed.trips : [DEFAULT_TRIP];
+    const currentTripId = trips.some((trip) => trip.id === parsed.currentTripId)
+      ? parsed.currentTripId
+      : trips[0].id;
     return {
-      trip: parsed.trip || DEFAULT_TRIP,
+      trips,
+      currentTripId,
       members: parsed.members.length ? parsed.members : [...DEFAULT_MEMBERS],
       activeUser: parsed.activeUser || DEFAULT_MEMBERS[0],
-      activities: parsed.activities,
-      notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [],
+      activities: parsed.activities.map((activity) => ({
+        ...activity,
+        tripId: activity.tripId || currentTripId,
+      })),
+      notifications: Array.isArray(parsed.notifications)
+        ? parsed.notifications.map((notification) => ({
+            ...notification,
+            tripId: notification.tripId || currentTripId,
+          }))
+        : [],
     };
   } catch {
     return defaultState();
