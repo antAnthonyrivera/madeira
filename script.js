@@ -229,6 +229,10 @@ function renderAll() {
 
 function renderActivityView() {
   const isRange = activityViewMode === "range";
+  const dayCount = getDayActivities().length;
+  const rangeCount = getRangeActivities().length;
+  activityViewDayButton.textContent = `Day (${dayCount})`;
+  activityViewRangeButton.textContent = `Range (${rangeCount})`;
   activityViewDayButton.classList.toggle("active", !isRange);
   activityViewRangeButton.classList.toggle("active", isRange);
   rangeControls.classList.toggle("hidden", !isRange);
@@ -244,6 +248,25 @@ function renderActivityView() {
 function setActivityViewMode(mode) {
   activityViewMode = mode === "range" ? "range" : "day";
   renderActivityView();
+}
+
+function getDayActivities() {
+  return state.activities
+    .filter((activity) => activity.tripId === state.currentTripId)
+    .filter((activity) => !selectedDay || activity.day === selectedDay);
+}
+
+function getRangeActivities() {
+  const start = normalizeDayForSort(rangeStartInput.value || selectedDay);
+  const end = normalizeDayForSort(rangeEndInput.value || selectedDay);
+  const low = start <= end ? start : end;
+  const high = start <= end ? end : start;
+  return state.activities
+    .filter((activity) => activity.tripId === state.currentTripId)
+    .filter((activity) => {
+      const day = normalizeDayForSort(activity.day);
+      return day >= low && day <= high;
+    });
 }
 
 function renderTripSelector() {
@@ -274,10 +297,7 @@ function renderTagMemberCheckboxes() {
 
 function renderDailyActivities() {
   dailyActivityList.innerHTML = "";
-  const filtered = state.activities
-    .filter((activity) => activity.tripId === state.currentTripId)
-    .filter((activity) => !selectedDay || activity.day === selectedDay)
-    .sort(compareActivitiesByDayThenTime);
+  const filtered = getDayActivities().sort(compareActivitiesByDayThenTime);
 
   if (!filtered.length) {
     const empty = document.createElement("p");
@@ -338,18 +358,7 @@ function renderDailyActivities() {
 
 function renderRangeActivities() {
   rangeActivityList.innerHTML = "";
-  const start = normalizeDayForSort(rangeStartInput.value || selectedDay);
-  const end = normalizeDayForSort(rangeEndInput.value || selectedDay);
-  const low = start <= end ? start : end;
-  const high = start <= end ? end : start;
-
-  const filtered = state.activities
-    .filter((activity) => activity.tripId === state.currentTripId)
-    .filter((activity) => {
-      const day = normalizeDayForSort(activity.day);
-      return day >= low && day <= high;
-    })
-    .sort(compareActivitiesByDayThenTime);
+  const filtered = getRangeActivities().sort(compareActivitiesByDayThenTime);
 
   if (!filtered.length) {
     const empty = document.createElement("p");
