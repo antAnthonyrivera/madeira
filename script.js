@@ -15,14 +15,11 @@ let state = loadState();
 
 const tripSelector = document.querySelector("#trip-selector");
 const addTripButton = document.querySelector("#add-trip-btn");
-const currentUserSelect = document.querySelector("#current-user");
 const memberList = document.querySelector("#member-list");
 const notificationList = document.querySelector("#notification-list");
 const selectedDayInput = document.querySelector("#selected-day");
 const dailyActivityList = document.querySelector("#daily-activity-list");
 const clearDataButton = document.querySelector("#clear-data");
-const mapOverlayPanel = document.querySelector("#map-overlay-panel");
-const mapOverlayToggle = document.querySelector("#map-overlay-toggle");
 const activeLayerList = document.querySelector("#active-layer-list");
 
 const mapAddMenuToggle = document.querySelector("#map-add-menu-toggle");
@@ -113,17 +110,6 @@ function setupHandlers() {
     state.currentTripId = trip.id;
     saveState();
     renderAll();
-  });
-
-  currentUserSelect.addEventListener("change", () => {
-    state.activeUser = currentUserSelect.value;
-    saveState();
-    renderNotifications();
-  });
-
-  mapOverlayToggle.addEventListener("click", () => {
-    const hidden = mapOverlayPanel.classList.toggle("hidden");
-    mapOverlayToggle.textContent = hidden ? "Show Panel" : "Hide Panel";
   });
 
   mapAddMenuToggle.addEventListener("click", () => {
@@ -221,7 +207,6 @@ function setupHandlers() {
 
 function renderAll() {
   renderTripSelector();
-  renderCurrentUserOptions();
   renderMembers();
   renderDailyActivities();
   renderNotifications();
@@ -237,17 +222,6 @@ function renderTripSelector() {
     option.textContent = trip.name;
     if (trip.id === state.currentTripId) option.selected = true;
     tripSelector.appendChild(option);
-  });
-}
-
-function renderCurrentUserOptions() {
-  currentUserSelect.innerHTML = "";
-  state.members.forEach((member) => {
-    const option = document.createElement("option");
-    option.value = member;
-    option.textContent = member;
-    if (member === state.activeUser) option.selected = true;
-    currentUserSelect.appendChild(option);
   });
 }
 
@@ -317,9 +291,7 @@ function renderNotifications() {
   notificationList.innerHTML = "";
   const unhandled = state.notifications.filter(
     (notification) =>
-      notification.userName === state.activeUser &&
-      !notification.handled &&
-      notification.tripId === state.currentTripId
+      !notification.handled && notification.tripId === state.currentTripId
   );
   if (!unhandled.length) {
     const empty = document.createElement("p");
@@ -422,7 +394,8 @@ async function loadWmsLayersFromUrl() {
 
 function renderWmsLayerOptions() {
   wmsLayerOptions.innerHTML = "";
-  wmsDiscoveredLayers.forEach((layer) => {
+  const sorted = [...wmsDiscoveredLayers].sort((a, b) => scoreLayer(b) - scoreLayer(a));
+  sorted.forEach((layer) => {
     const label = document.createElement("label");
     label.className = "layer-item wms-option";
     const checkbox = document.createElement("input");
@@ -448,6 +421,7 @@ function addSelectedWmsLayers() {
       layers: input.value,
       format: "image/png",
       transparent: true,
+      opacity: 0.55,
     }).addTo(map);
     wmsLayerMap.set(input.value, {
       name: input.value,
@@ -546,12 +520,11 @@ function selectedTaggedMembers() {
 
 function createTagNotifications(activity) {
   activity.taggedMembers
-    .filter((name) => name !== state.activeUser)
     .forEach((userName) => {
       state.notifications.push({
         id: crypto.randomUUID(),
         userName,
-        fromUser: state.activeUser,
+        fromUser: "Activity tagged",
         activityId: activity.id,
         tripId: activity.tripId,
         handled: false,
@@ -565,7 +538,6 @@ function defaultState() {
     trips: [DEFAULT_TRIP],
     currentTripId: DEFAULT_TRIP.id,
     members: [...DEFAULT_MEMBERS],
-    activeUser: DEFAULT_MEMBERS[0],
     activities: [],
     notifications: [],
   };
@@ -585,7 +557,6 @@ function loadState() {
       trips,
       currentTripId,
       members: parsed.members.length ? parsed.members : [...DEFAULT_MEMBERS],
-      activeUser: parsed.activeUser || DEFAULT_MEMBERS[0],
       activities: parsed.activities.map((activity) => ({ ...activity, tripId: activity.tripId || currentTripId })),
       notifications: Array.isArray(parsed.notifications)
         ? parsed.notifications.map((item) => ({ ...item, tripId: item.tripId || currentTripId }))
@@ -647,4 +618,16 @@ function escapeHtml(text) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function scoreLayer(layer) {
+  const text = `${layer.title} ${layer.name}`.toLowerCase();
+  let score = 0;
+  if (text.includes("cloud")) score += 5;
+  if (text.includes("precip")) score += 5;
+  if (text.includes("rain")) score += 5;
+  if (text.includes("weather")) score += 3;
+  if (text.includes("mask")) score += 2;
+  if (text.includes("top")) score += 1;
+  return score;
 }

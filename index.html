@@ -28,47 +28,6 @@
         <div class="map-wrap">
           <div id="map"></div>
 
-          <button id="map-overlay-toggle" type="button" class="overlay-toggle">Hide Panel</button>
-
-          <aside id="map-overlay-panel" class="map-overlay-panel">
-            <div class="stack">
-              <label for="selected-day">Selected day</label>
-              <input id="selected-day" type="date" />
-
-              <label for="current-user">Current user</label>
-              <select id="current-user"></select>
-            </div>
-
-            <h3>Team Members</h3>
-            <div id="member-list" class="chips"></div>
-
-            <h3>Notifications</h3>
-            <div id="notification-list" class="stack">
-              <p class="empty">No notifications.</p>
-            </div>
-
-            <section class="active-layers">
-              <div class="row between tight-bottom">
-                <h3>Map Data</h3>
-                <button id="clear-data" class="danger small">Reset</button>
-              </div>
-
-              <details open>
-                <summary><strong>Activities</strong></summary>
-                <div id="daily-activity-list" class="stack">
-                  <p class="empty">No activities for selected day.</p>
-                </div>
-              </details>
-
-              <details open>
-                <summary><strong>Layers</strong></summary>
-                <div id="active-layer-list" class="stack">
-                  <p class="empty">No WMS layers active.</p>
-                </div>
-              </details>
-            </section>
-          </aside>
-
           <div class="fab-stack">
             <button id="map-add-menu-toggle" class="fab" type="button" title="Add">+</button>
             <div id="map-add-menu" class="fab-menu hidden">
@@ -76,7 +35,37 @@
               <button id="open-activity-modal" type="button" class="small">Add Activity</button>
             </div>
           </div>
+
+          <section class="active-layers">
+            <div class="row between tight-bottom">
+              <h3>Map Layers</h3>
+              <button id="clear-data" class="danger small">Reset</button>
+            </div>
+            <div id="active-layer-list" class="stack">
+              <p class="empty">No WMS layers active.</p>
+            </div>
+          </section>
         </div>
+      </section>
+
+      <section class="panel side-panel">
+        <div class="stack">
+          <label for="selected-day">Selected day</label>
+          <input id="selected-day" type="date" />
+        </div>
+
+        <h3>Daily Activities</h3>
+        <div id="daily-activity-list" class="stack">
+          <p class="empty">No activities for selected day.</p>
+        </div>
+
+        <h3>Notifications</h3>
+        <div id="notification-list" class="stack">
+          <p class="empty">No notifications.</p>
+        </div>
+
+        <h3>Team Members</h3>
+        <div id="member-list" class="chips"></div>
       </section>
     </main>
 
@@ -94,6 +83,7 @@
         </div>
         <div id="wms-layer-selector" class="stack hidden">
           <h3>Available Layers</h3>
+          <p class="status-text">Recommended for Madeira weather: layers containing "Cloud Mask", "Cloud Top", or "Precipitation".</p>
           <div id="wms-layer-options" class="stack"></div>
           <div class="row">
             <button id="add-selected-layers" type="button">Add Selected</button>
