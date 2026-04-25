@@ -20,6 +20,7 @@ let syncQueued = false;
 let geminiApiKey = "";
 
 const selectedTripBrand = document.querySelector("#selected-trip-brand");
+const syncStatusPill = document.querySelector("#sync-status");
 const tripList = document.querySelector("#trip-list");
 const addTripButton = document.querySelector("#add-trip-btn");
 const notificationList = document.querySelector("#notification-list");
@@ -44,6 +45,7 @@ const activeLayerList = document.querySelector("#active-layer-list");
 const presetTodayButton = document.querySelector("#preset-today");
 const presetWeekendButton = document.querySelector("#preset-weekend");
 const presetWholeTripButton = document.querySelector("#preset-whole-trip");
+const applyRangeButton = document.querySelector("#apply-range-btn");
 
 const openWmsModalButton = document.querySelector("#open-wms-modal");
 const wmsModal = document.querySelector("#wms-modal");
@@ -104,6 +106,7 @@ async function init() {
   await bootstrapRemoteState();
   await refreshStateFromRemote();
   setupRealtimeSubscriptions();
+  setSyncStatus("saved");
   updateWeatherForecast();
   renderAll();
 }
@@ -149,6 +152,12 @@ function setupHandlers() {
   });
   presetWholeTripButton.addEventListener("click", () => {
     applyPresetWholeTrip();
+  });
+  applyRangeButton.addEventListener("click", () => {
+    selectedDay = normalizeDayForSort(rangeStartInput.value || todayIso());
+    updateWeatherForecast();
+    renderDailyActivities();
+    closeAllDropdowns();
   });
 
   notificationFilter.addEventListener("change", () => {
@@ -812,9 +821,15 @@ function queueRemoteSync() {
     return;
   }
   syncInFlight = true;
+  let syncSucceeded = false;
+  setSyncStatus("saving");
   void syncStateToRemote()
+    .then(() => {
+      syncSucceeded = true;
+    })
     .catch((error) => {
       console.error("State sync failed", error);
+      setSyncStatus("error");
     })
     .finally(async () => {
       syncInFlight = false;
@@ -823,7 +838,10 @@ function queueRemoteSync() {
         queueRemoteSync();
         return;
       }
-      await refreshStateFromRemote();
+      if (syncSucceeded) {
+        await refreshStateFromRemote();
+        setSyncStatus("saved");
+      }
       renderAll();
     });
 }
@@ -892,7 +910,8 @@ async function refreshStateFromRemote() {
 async function syncStateToRemote() {
   if (!supabaseClient) return;
   const tripRows = state.trips.map((trip) => ({ id: trip.id, name: trip.name }));
-  await supabaseClient.from("trips").upsert(tripRows, { onConflict: "id" });
+  const tripsWrite = await supabaseClient.from("trips").upsert(tripRows, { onConflict: "id" });
+  throwIfSupabaseError(tripsWrite.error, "saving trips");
 
   const activityRows = state.activities.map((activity) => ({
     id: activity.id,
@@ -910,7 +929,8 @@ async function syncStateToRemote() {
     pin_hidden: Boolean(activity.pinHidden),
     created_at: activity.createdAt || new Date().toISOString(),
   }));
-  await supabaseClient.from("activities").upsert(activityRows, { onConflict: "id" });
+  const activitiesWrite = await supabaseClient.from("activities").upsert(activityRows, { onConflict: "id" });
+  throwIfSupabaseError(activitiesWrite.error, "saving activities");
 
   const notifRows = state.notifications.map((notification) => ({
     id: notification.id,
@@ -921,7 +941,8 @@ async function syncStateToRemote() {
     handled: Boolean(notification.handled),
     created_at: notification.createdAt || new Date().toISOString(),
   }));
-  await supabaseClient.from("notifications").upsert(notifRows, { onConflict: "id" });
+  const notificationsWrite = await supabaseClient.from("notifications").upsert(notifRows, { onConflict: "id" });
+  throwIfSupabaseError(notificationsWrite.error, "saving notifications");
 
   const [remoteTrips, remoteActivities, remoteNotifications] = await Promise.all([
     supabaseClient.from("trips").select("id"),
@@ -931,18 +952,49 @@ async function syncStateToRemote() {
   if (!remoteTrips.error) {
     const localTripIds = new Set(state.trips.map((trip) => trip.id));
     const deleteTripIds = (remoteTrips.data || []).map((row) => row.id).filter((id) => !localTripIds.has(id));
-    if (deleteTripIds.length) await supabaseClient.from("trips").delete().in("id", deleteTripIds);
+    if (deleteTripIds.length) {
+      const deleteTrips = await supabaseClient.from("trips").delete().in("id", deleteTripIds);
+      throwIfSupabaseError(deleteTrips.error, "removing stale trips");
+    }
   }
   if (!remoteActivities.error) {
     const localActivityIds = new Set(state.activities.map((activity) => activity.id));
     const deleteActivityIds = (remoteActivities.data || []).map((row) => row.id).filter((id) => !localActivityIds.has(id));
-    if (deleteActivityIds.length) await supabaseClient.from("activities").delete().in("id", deleteActivityIds);
+    if (deleteActivityIds.length) {
+      const deleteActivities = await supabaseClient.from("activities").delete().in("id", deleteActivityIds);
+      throwIfSupabaseError(deleteActivities.error, "removing stale activities");
+    }
   }
   if (!remoteNotifications.error) {
     const localNotifIds = new Set(state.notifications.map((notification) => notification.id));
     const deleteNotifIds = (remoteNotifications.data || []).map((row) => row.id).filter((id) => !localNotifIds.has(id));
-    if (deleteNotifIds.length) await supabaseClient.from("notifications").delete().in("id", deleteNotifIds);
+    if (deleteNotifIds.length) {
+      const deleteNotifications = await supabaseClient.from("notifications").delete().in("id", deleteNotifIds);
+      throwIfSupabaseError(deleteNotifications.error, "removing stale notifications");
+    }
   }
+}
+
+function throwIfSupabaseError(error, context) {
+  if (!error) return;
+  throw new Error(`Supabase error while ${context}: ${error.message || "Unknown error"}`);
+}
+
+function setSyncStatus(status) {
+  if (!syncStatusPill) return;
+  syncStatusPill.classList.remove("sync-status-saving", "sync-status-saved", "sync-status-error");
+  if (status === "saving") {
+    syncStatusPill.textContent = "Saving...";
+    syncStatusPill.classList.add("sync-status-saving");
+    return;
+  }
+  if (status === "error") {
+    syncStatusPill.textContent = "Sync error";
+    syncStatusPill.classList.add("sync-status-error");
+    return;
+  }
+  syncStatusPill.textContent = "Saved";
+  syncStatusPill.classList.add("sync-status-saved");
 }
 
 function setupRealtimeSubscriptions() {
