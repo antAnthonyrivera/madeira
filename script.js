@@ -66,6 +66,26 @@ const wmsUrlInput = document.querySelector("#wms-url-input");
 const wmsError = document.querySelector("#wms-error");
 const wmsLayerSelector = document.querySelector("#wms-layer-selector");
 const wmsLayerOptions = document.querySelector("#wms-layer-options");
+const presetProviderMadeiraButton = document.querySelector("#preset-provider-madeira");
+const presetProviderMundialisButton = document.querySelector("#preset-provider-mundialis");
+const presetProviderEeaButton = document.querySelector("#preset-provider-eea");
+const quickWaymarkedTrailsButton = document.querySelector("#quick-waymarked-trails");
+const quickHikeTopoComboButton = document.querySelector("#quick-hike-topo-combo");
+
+const WMS_PRESET_PROVIDERS = {
+  madeira: {
+    url: "https://ide.ram.madeira.gov.pt/arcgis/services/Publico/MapServer/WMSServer",
+    recommendedLayerMatchers: [/levada/i, /trilho/i, /trail/i, /topo/i, /terrain/i, /carto/i],
+  },
+  mundialis: {
+    url: "https://ows.mundialis.de/osm/service?",
+    recommendedLayerNames: ["HikeMap", "TOPO-WMS", "SRTM30-Colored-Hillshade"],
+  },
+  eea: {
+    url: "https://image.discomap.eea.europa.eu/arcgis/services/GioLand/EU_DEM/ImageServer/WMSServer",
+    recommendedLayerMatchers: [/dem/i, /elevation/i, /hillshade/i, /terrain/i],
+  },
+};
 
 const openActivityModalButton = document.querySelector("#open-activity-modal");
 const activityModal = document.querySelector("#activity-modal");
@@ -249,6 +269,11 @@ function setupHandlers() {
   });
   loadWmsLayersButton.addEventListener("click", loadWmsLayersFromUrl);
   addSelectedLayersButton.addEventListener("click", addSelectedWmsLayers);
+  presetProviderMadeiraButton.addEventListener("click", () => applyWmsProviderPreset("madeira"));
+  presetProviderMundialisButton.addEventListener("click", () => applyWmsProviderPreset("mundialis"));
+  presetProviderEeaButton.addEventListener("click", () => applyWmsProviderPreset("eea"));
+  quickWaymarkedTrailsButton.addEventListener("click", addWaymarkedTrailsOverlay);
+  quickHikeTopoComboButton.addEventListener("click", addHikeTopoComboOverlay);
 
   magicAiImportButton.addEventListener("click", () => {
     magicImportStatus.textContent = "";
@@ -792,23 +817,107 @@ function addSelectedWmsLayers() {
   }
   const url = normalizeWmsServiceUrl(wmsUrlInput.value.trim());
   selected.forEach((input) => {
-    if (wmsLayerMap.has(input.value)) return;
-    const layer = L.tileLayer.wms(url, {
-      layers: input.value,
-      format: "image/png",
-      transparent: true,
-      opacity: 0.55,
-      version: "1.3.0",
-    }).addTo(map);
-    wmsLayerMap.set(input.value, {
-      name: input.value,
-      title: input.dataset.title || input.value,
-      layer,
-      visible: true,
-    });
+    addWmsMapLayer(url, input.value, input.dataset.title || input.value);
   });
   renderActiveLayersPanel();
   wmsModal.classList.add("hidden");
+}
+
+function addWmsMapLayer(url, layerName, layerTitle) {
+  const entryName = `wms:${url}:${layerName}`;
+  if (wmsLayerMap.has(entryName)) return;
+  const layer = L.tileLayer.wms(url, {
+    layers: layerName,
+    format: "image/png",
+    transparent: true,
+    opacity: 0.55,
+    version: "1.3.0",
+  }).addTo(map);
+  wmsLayerMap.set(entryName, {
+    name: entryName,
+    title: layerTitle || layerName,
+    layer,
+    visible: true,
+  });
+}
+
+function addWaymarkedTrailsOverlay() {
+  const key = "tile:waymarked-hiking";
+  if (wmsLayerMap.has(key)) {
+    showWmsError("Waymarked hiking trails overlay is already active.");
+    return;
+  }
+  clearWmsError();
+  const layer = L.tileLayer("https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    opacity: 0.95,
+    attribution: '&copy; <a href="https://waymarkedtrails.org/">Waymarked Trails</a>, OSM contributors',
+  }).addTo(map);
+  wmsLayerMap.set(key, {
+    name: key,
+    title: "Hiking Trails (Waymarked)",
+    layer,
+    visible: true,
+  });
+  renderActiveLayersPanel();
+  wmsModal.classList.add("hidden");
+}
+
+async function addHikeTopoComboOverlay() {
+  clearWmsError();
+  const mundialis = WMS_PRESET_PROVIDERS.mundialis;
+  const topoLayerName = "TOPO-WMS";
+  const topoLayerKey = `wms:${normalizeWmsServiceUrl(mundialis.url)}:${topoLayerName}`;
+  if (!wmsLayerMap.has(topoLayerKey)) {
+    addWmsMapLayer(mundialis.url, topoLayerName, "Topographic WMS - by terrestris");
+  }
+  addWaymarkedTrailsOverlay();
+  const topoEntry = wmsLayerMap.get(topoLayerKey);
+  const trailsEntry = wmsLayerMap.get("tile:waymarked-hiking");
+  if (topoEntry?.layer && trailsEntry?.layer) {
+    topoEntry.layer.bringToBack();
+    trailsEntry.layer.bringToFront();
+  }
+  renderActiveLayersPanel();
+  wmsModal.classList.add("hidden");
+}
+
+async function applyWmsProviderPreset(providerKey) {
+  const provider = WMS_PRESET_PROVIDERS[providerKey];
+  if (!provider) return;
+  wmsUrlInput.value = provider.url;
+  await loadWmsLayersFromUrl();
+  if (!wmsDiscoveredLayers.length) return;
+  const selected = pickRecommendedLayersForProvider(provider, wmsDiscoveredLayers);
+  if (!selected.length) {
+    showWmsError("Loaded provider. Select a layer manually if no recommendation matched.");
+    return;
+  }
+  selected.forEach((layerMeta) => {
+    addWmsMapLayer(normalizeWmsServiceUrl(provider.url), layerMeta.name, layerMeta.title || layerMeta.name);
+  });
+  renderActiveLayersPanel();
+  wmsModal.classList.add("hidden");
+}
+
+function pickRecommendedLayersForProvider(provider, discoveredLayers) {
+  const discoveredByLower = new Map(
+    discoveredLayers.map((item) => [String(item.name || "").toLowerCase(), item])
+  );
+  if (Array.isArray(provider.recommendedLayerNames) && provider.recommendedLayerNames.length) {
+    const direct = provider.recommendedLayerNames
+      .map((name) => discoveredByLower.get(String(name).toLowerCase()))
+      .filter(Boolean);
+    if (direct.length) return direct;
+  }
+  if (Array.isArray(provider.recommendedLayerMatchers) && provider.recommendedLayerMatchers.length) {
+    const matched = discoveredLayers.filter((item) => {
+      const text = `${item.title || ""} ${item.name || ""}`;
+      return provider.recommendedLayerMatchers.some((matcher) => matcher.test(text));
+    });
+    if (matched.length) return matched.slice(0, 3);
+  }
+  return discoveredLayers.slice(0, 1);
 }
 
 function renderActiveLayersPanel() {
@@ -816,7 +925,7 @@ function renderActiveLayersPanel() {
   if (!wmsLayerMap.size) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "No WMS layers active.";
+    empty.textContent = "No map overlays active.";
     activeLayerList.appendChild(empty);
     return;
   }

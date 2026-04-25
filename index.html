@@ -149,7 +149,7 @@
             </div>
           </div>
           <div id="active-layer-list" class="stack section-list">
-            <p class="empty">No WMS layers active.</p>
+            <p class="empty">No map overlays active.</p>
           </div>
         </section>
       </section>
@@ -162,6 +162,17 @@
           <button id="close-wms-modal-top" type="button" class="danger small">Close</button>
         </div>
         <div class="stack">
+          <label>Preset providers</label>
+          <div class="row preset-row">
+            <button id="preset-provider-madeira" type="button" class="small preset-btn">Madeira</button>
+            <button id="preset-provider-mundialis" type="button" class="small preset-btn">Mundialis</button>
+            <button id="preset-provider-eea" type="button" class="small preset-btn">EEA</button>
+          </div>
+          <label>Quick layers</label>
+          <div class="row preset-row">
+            <button id="quick-waymarked-trails" type="button" class="small">Add Hiking Trails (Waymarked)</button>
+            <button id="quick-hike-topo-combo" type="button" class="small">Add Trails + TOPO</button>
+          </div>
           <label for="wms-url-input">WMS URL</label>
           <input id="wms-url-input" placeholder="Enter WMS URL" />
           <button id="load-wms-layers" type="button">Load Layers</button>
