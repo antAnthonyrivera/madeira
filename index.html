@@ -27,31 +27,33 @@
       <section class="panel map-panel">
         <div class="map-wrap">
           <div id="map"></div>
-
-          <div class="fab-stack">
-            <button id="map-add-menu-toggle" class="fab" type="button" title="Add">+</button>
-            <div id="map-add-menu" class="fab-menu hidden">
-              <button id="open-activity-modal" type="button" class="small">Add Activity</button>
-              <button id="open-wms-modal" type="button" class="small">Add Layer</button>
-            </div>
-          </div>
         </div>
       </section>
 
       <section class="panel side-panel">
-        <div class="row between tight-bottom">
-          <h3>Activities</h3>
-          <button id="clear-data" class="danger small">Reset</button>
+        <div class="row actions-row">
+          <button id="open-activity-modal" type="button" class="small">Add Activity</button>
+          <button id="open-wms-modal" type="button" class="small">Add Layer</button>
         </div>
+
+        <div class="section-divider"></div>
         <div class="stack">
           <label for="selected-day">Selected day</label>
           <input id="selected-day" type="date" />
         </div>
+        <div id="weather-forecast" class="weather-box">
+          <p class="meta">Weather forecast loading...</p>
+        </div>
+        <div class="row between tight-bottom">
+          <h3>Activities</h3>
+          <button id="clear-data" class="danger small">Reset</button>
+        </div>
 
-        <div id="daily-activity-list" class="stack">
+        <div id="daily-activity-list" class="stack section-list">
           <p class="empty">No activities for selected day.</p>
         </div>
 
+        <div class="section-divider"></div>
         <div class="row between tight-bottom">
           <h3>Notifications</h3>
           <select id="notification-filter" class="small-select">
@@ -59,12 +61,13 @@
             <option value="mine">Assigned to me</option>
           </select>
         </div>
-        <div id="notification-list" class="stack">
+        <div id="notification-list" class="stack section-list">
           <p class="empty">No notifications.</p>
         </div>
 
+        <div class="section-divider"></div>
         <h3>Layers</h3>
-        <div id="active-layer-list" class="stack">
+        <div id="active-layer-list" class="stack section-list">
           <p class="empty">No WMS layers active.</p>
         </div>
       </section>

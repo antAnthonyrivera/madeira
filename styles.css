@@ -105,6 +105,15 @@ h2 {
   margin-bottom: 0.4rem;
 }
 
+.actions-row {
+  gap: 0.5rem;
+}
+
+.section-divider {
+  border-top: 1px solid var(--line);
+  margin: 0.2rem 0;
+}
+
 input,
 textarea,
 select,
@@ -276,25 +285,6 @@ button.small {
   border-radius: 10px;
   padding: 0.45rem;
   width: 150px;
-}
-
-.active-layers {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  width: min(380px, 55%);
-  max-height: 40vh;
-  overflow: auto;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.55rem;
-  z-index: 1200;
-}
-
-.active-layers h3 {
-  margin: 0 0 0.45rem;
-  font-size: 0.9rem;
 }
 
 .layer-item {
