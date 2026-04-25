@@ -31,14 +31,17 @@
             <div id="trip-dropdown" class="dropdown-panel hidden">
               <div class="row between">
                 <h3 class="trip-picker-title">Your Trips</h3>
-                <button id="add-trip-btn" type="button" class="small">+ New Trip</button>
+                <button id="add-trip-btn" type="button" class="small">+</button>
               </div>
               <div id="trip-list" class="stack trip-list-stack"></div>
               <div class="trip-picker-divider"></div>
               <div class="stack">
                 <div class="row between">
                   <h3 class="compact-title">Trip People</h3>
-                  <span class="meta">Per-trip</span>
+                  <div class="row">
+                    <span class="meta">Me:</span>
+                    <select id="current-user-select" class="small-select"></select>
+                  </div>
                 </div>
                 <div id="trip-member-list" class="stack"></div>
                 <div class="row">
@@ -100,13 +103,10 @@
             <div id="notification-panel" class="dropdown-panel hidden">
               <div class="row between tight-bottom">
                 <h3>Notifications</h3>
-                <div class="row">
-                  <select id="current-user-select" class="small-select"></select>
-                  <select id="notification-filter" class="small-select">
-                    <option value="all">All</option>
-                    <option value="mine">Assigned to me</option>
-                  </select>
-                </div>
+                <select id="notification-filter" class="small-select">
+                  <option value="all">All</option>
+                  <option value="mine">Assigned to me</option>
+                </select>
               </div>
               <div id="notification-list" class="stack section-list">
                 <p class="empty">No notifications.</p>
