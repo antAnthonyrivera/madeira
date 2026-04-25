@@ -5,7 +5,6 @@ const DEFAULT_WMS_URL = "https://view.eumetsat.int/geoserver/wms";
 
 let map = null;
 let mapPickMode = false;
-let tempPickMarker = null;
 let selectedDay = "";
 let wmsDiscoveredLayers = [];
 const wmsLayerMap = new Map();
@@ -19,6 +18,7 @@ const memberList = document.querySelector("#member-list");
 const notificationList = document.querySelector("#notification-list");
 const selectedDayInput = document.querySelector("#selected-day");
 const dailyActivityList = document.querySelector("#daily-activity-list");
+const notificationFilter = document.querySelector("#notification-filter");
 const clearDataButton = document.querySelector("#clear-data");
 const activeLayerList = document.querySelector("#active-layer-list");
 
@@ -81,8 +81,6 @@ function setupMap() {
     fields.lat.value = lat.toFixed(5);
     fields.lng.value = lng.toFixed(5);
     setActivityLocStatus(`Pinned ${lat.toFixed(5)}, ${lng.toFixed(5)}`, "ok");
-    if (tempPickMarker) tempPickMarker.remove();
-    tempPickMarker = L.marker([lat, lng]).addTo(map).bindPopup("Selected point").openPopup();
     mapPickMode = false;
     placeOnMapButton.textContent = "Pick on Map";
   });
@@ -94,6 +92,10 @@ function setupHandlers() {
   selectedDayInput.addEventListener("change", () => {
     selectedDay = selectedDayInput.value;
     renderDailyActivities();
+  });
+
+  notificationFilter.addEventListener("change", () => {
+    renderNotifications();
   });
 
   tripSelector.addEventListener("change", () => {
@@ -143,9 +145,10 @@ function setupHandlers() {
     setActivityLocStatus("", "");
     activityModal.classList.remove("hidden");
   });
-  closeActivityModalButton.addEventListener("click", () => activityModal.classList.add("hidden"));
-  activityModal.addEventListener("click", (event) => {
-    if (event.target === activityModal) activityModal.classList.add("hidden");
+  closeActivityModalButton.addEventListener("click", () => {
+    activityModal.classList.add("hidden");
+    mapPickMode = false;
+    placeOnMapButton.textContent = "Pick on Map";
   });
 
   fields.day.addEventListener("click", openDayPicker);
@@ -183,12 +186,10 @@ function setupHandlers() {
     saveState();
     activityModal.classList.add("hidden");
     activityForm.reset();
+    mapPickMode = false;
+    placeOnMapButton.textContent = "Pick on Map";
     selectedDayInput.value = activity.day;
     selectedDay = activity.day;
-    if (tempPickMarker) {
-      tempPickMarker.remove();
-      tempPickMarker = null;
-    }
     setActivityLocStatus("", "");
     renderAll();
   });
@@ -227,10 +228,12 @@ function renderTripSelector() {
 
 function renderMembers() {
   memberList.innerHTML = "";
+  const counts = countUnhandledByMember();
   state.members.forEach((member) => {
     const chip = document.createElement("span");
     chip.className = "chip";
-    chip.textContent = member;
+    const count = counts.get(member) || 0;
+    chip.textContent = count > 0 ? `${member} (${count})` : member;
     memberList.appendChild(chip);
   });
 }
@@ -289,10 +292,12 @@ function renderDailyActivities() {
 
 function renderNotifications() {
   notificationList.innerHTML = "";
-  const unhandled = state.notifications.filter(
-    (notification) =>
-      !notification.handled && notification.tripId === state.currentTripId
-  );
+  const unhandled = getUnhandledNotificationsForCurrentTrip().filter((notification) => {
+    if (notificationFilter.value === "mine") {
+      return notification.userName === DEFAULT_MEMBERS[0];
+    }
+    return true;
+  });
   if (!unhandled.length) {
     const empty = document.createElement("p");
     empty.className = "empty";
@@ -307,9 +312,7 @@ function renderNotifications() {
       const card = document.createElement("div");
       card.className = "notification-card";
       const message = document.createElement("p");
-      message.textContent = `${notification.fromUser} tagged you on ${
-        activity ? activity.title : "an activity"
-      }.`;
+      message.textContent = `${notification.userName} was tagged on ${activity ? activity.title : "an activity"}.`;
       const button = document.createElement("button");
       button.className = "small";
       button.textContent = "Mark addressed";
@@ -531,6 +534,28 @@ function createTagNotifications(activity) {
         createdAt: new Date().toISOString(),
       });
     });
+}
+
+function getUnhandledNotificationsForCurrentTrip() {
+  const currentTripActivityIds = new Set(
+    state.activities.filter((activity) => activity.tripId === state.currentTripId).map((activity) => activity.id)
+  );
+  return state.notifications.filter(
+    (notification) =>
+      !notification.handled &&
+      notification.tripId === state.currentTripId &&
+      state.members.includes(notification.userName) &&
+      currentTripActivityIds.has(notification.activityId)
+  );
+}
+
+function countUnhandledByMember() {
+  const counts = new Map();
+  state.members.forEach((member) => counts.set(member, 0));
+  getUnhandledNotificationsForCurrentTrip().forEach((notification) => {
+    counts.set(notification.userName, (counts.get(notification.userName) || 0) + 1);
+  });
+  return counts;
 }
 
 function defaultState() {

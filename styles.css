@@ -109,6 +109,13 @@ select {
   border-radius: 8px;
 }
 
+.small-select {
+  width: auto;
+  min-width: 150px;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.85rem;
+}
+
 button {
   border: none;
   background: var(--accent);
@@ -308,12 +315,19 @@ button.small {
 .side-panel {
   max-height: min(84vh, 920px);
   overflow: auto;
+  display: grid;
+  gap: 0.85rem;
 }
 
 #daily-activity-list,
 #notification-list {
   max-height: 26vh;
   overflow: auto;
+}
+
+.side-panel h3 {
+  margin-top: 0.25rem;
+  margin-bottom: 0.35rem;
 }
 
 #activity-modal {
