@@ -1,4 +1,5 @@
-const STORAGE_KEY = "trip-planner-local-v4";
+const SUPABASE_URL = "https://rwibuoccrcgrozysfwfw.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_l5KJxT_og6A7VKKK2-5MOg_wtBEDb7F";
 const DEFAULT_MEMBERS = ["Anthony", "Vivian", "Jason", "Darrell"];
 const DEFAULT_TRIP = { id: "madeira-default", name: "Madeira" };
 const DEFAULT_WMS_URL = "";
@@ -11,7 +12,11 @@ const wmsLayerMap = new Map();
 const markerByActivityId = new Map();
 let pendingPinActivityId = null;
 
-let state = loadState();
+const supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let state = defaultState();
+let realtimeChannel = null;
+let syncInFlight = false;
+let syncQueued = false;
 
 const selectedTripBrand = document.querySelector("#selected-trip-brand");
 const tripList = document.querySelector("#trip-list");
@@ -73,9 +78,9 @@ const fields = {
   lng: document.querySelector("#activity-lng"),
 };
 
-init();
+void init();
 
-function init() {
+async function init() {
   setupMap();
   setupHandlers();
   if (DEFAULT_WMS_URL) {
@@ -84,6 +89,9 @@ function init() {
   selectedDay = todayIso();
   rangeStartInput.value = selectedDay;
   rangeEndInput.value = selectedDay;
+  await bootstrapRemoteState();
+  await refreshStateFromRemote();
+  setupRealtimeSubscriptions();
   updateWeatherForecast();
   renderAll();
 }
@@ -755,35 +763,172 @@ function defaultState() {
 }
 
 function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return defaultState();
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed.activities) || !Array.isArray(parsed.members)) return defaultState();
-    const trips = Array.isArray(parsed.trips) && parsed.trips.length ? parsed.trips : [DEFAULT_TRIP];
-    const currentTripId = trips.some((trip) => trip.id === parsed.currentTripId)
-      ? parsed.currentTripId
-      : trips[0].id;
-    return {
-      trips,
-      currentTripId,
-      members: parsed.members.length ? parsed.members : [...DEFAULT_MEMBERS],
-      activities: parsed.activities.map((activity) => ({
-        ...activity,
-        tripId: activity.tripId || currentTripId,
-        pinHidden: Boolean(activity.pinHidden),
-      })),
-      notifications: Array.isArray(parsed.notifications)
-        ? parsed.notifications.map((item) => ({ ...item, tripId: item.tripId || currentTripId }))
-        : [],
-    };
-  } catch {
-    return defaultState();
-  }
+  return defaultState();
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  queueRemoteSync();
+}
+
+function queueRemoteSync() {
+  if (syncInFlight) {
+    syncQueued = true;
+    return;
+  }
+  syncInFlight = true;
+  void syncStateToRemote()
+    .catch((error) => {
+      console.error("State sync failed", error);
+    })
+    .finally(async () => {
+      syncInFlight = false;
+      if (syncQueued) {
+        syncQueued = false;
+        queueRemoteSync();
+        return;
+      }
+      await refreshStateFromRemote();
+      renderAll();
+    });
+}
+
+async function bootstrapRemoteState() {
+  if (!supabaseClient) return;
+  const { data: trips, error: tripsError } = await supabaseClient.from("trips").select("id").limit(1);
+  if (!tripsError && (!trips || !trips.length)) {
+    await supabaseClient.from("trips").insert([{ id: DEFAULT_TRIP.id, name: DEFAULT_TRIP.name }]);
+  }
+  const memberRows = DEFAULT_MEMBERS.map((name) => ({ name }));
+  await supabaseClient.from("members").upsert(memberRows, { onConflict: "name" });
+}
+
+async function refreshStateFromRemote() {
+  if (!supabaseClient) return;
+  const [tripsRes, activitiesRes, notificationsRes, membersRes] = await Promise.all([
+    supabaseClient.from("trips").select("*").order("created_at", { ascending: true }),
+    supabaseClient.from("activities").select("*").order("created_at", { ascending: true }),
+    supabaseClient.from("notifications").select("*").order("created_at", { ascending: true }),
+    supabaseClient.from("members").select("*").order("created_at", { ascending: true }),
+  ]);
+  if (tripsRes.error || activitiesRes.error || notificationsRes.error || membersRes.error) {
+    console.error("Failed to refresh remote state", {
+      trips: tripsRes.error,
+      activities: activitiesRes.error,
+      notifications: notificationsRes.error,
+      members: membersRes.error,
+    });
+    return;
+  }
+  const trips = (tripsRes.data || []).map((trip) => ({ id: trip.id, name: trip.name }));
+  const currentTripId = trips.some((trip) => trip.id === state.currentTripId) ? state.currentTripId : trips[0]?.id || DEFAULT_TRIP.id;
+  state = {
+    trips: trips.length ? trips : [DEFAULT_TRIP],
+    currentTripId,
+    members: (membersRes.data || []).map((member) => member.name).filter(Boolean),
+    activities: (activitiesRes.data || []).map((row) => ({
+      id: row.id,
+      tripId: row.trip_id || currentTripId,
+      title: row.title || "",
+      day: normalizeDayForSort(row.day),
+      time: row.time || "",
+      category: row.category || "🏔️",
+      notes: row.notes || "",
+      location: row.location || "",
+      address: row.address || "",
+      lat: Number.isFinite(Number(row.lat)) ? Number(row.lat) : null,
+      lng: Number.isFinite(Number(row.lng)) ? Number(row.lng) : null,
+      taggedMembers: Array.isArray(row.tagged_members) ? row.tagged_members : [],
+      pinHidden: Boolean(row.pin_hidden),
+      createdAt: row.created_at || new Date().toISOString(),
+    })),
+    notifications: (notificationsRes.data || []).map((row) => ({
+      id: row.id,
+      userName: row.user_name,
+      fromUser: row.from_user,
+      activityId: row.activity_id,
+      tripId: row.trip_id || currentTripId,
+      handled: Boolean(row.handled),
+      createdAt: row.created_at || new Date().toISOString(),
+    })),
+  };
+}
+
+async function syncStateToRemote() {
+  if (!supabaseClient) return;
+  const tripRows = state.trips.map((trip) => ({ id: trip.id, name: trip.name }));
+  await supabaseClient.from("trips").upsert(tripRows, { onConflict: "id" });
+
+  const activityRows = state.activities.map((activity) => ({
+    id: activity.id,
+    trip_id: activity.tripId,
+    title: activity.title,
+    day: normalizeDayForSort(activity.day),
+    time: activity.time,
+    category: activity.category,
+    notes: activity.notes || null,
+    location: activity.location || null,
+    address: activity.address || null,
+    lat: Number.isFinite(activity.lat) ? activity.lat : null,
+    lng: Number.isFinite(activity.lng) ? activity.lng : null,
+    tagged_members: Array.isArray(activity.taggedMembers) ? activity.taggedMembers : [],
+    pin_hidden: Boolean(activity.pinHidden),
+    created_at: activity.createdAt || new Date().toISOString(),
+  }));
+  await supabaseClient.from("activities").upsert(activityRows, { onConflict: "id" });
+
+  const notifRows = state.notifications.map((notification) => ({
+    id: notification.id,
+    user_name: notification.userName,
+    from_user: notification.fromUser || "Activity tagged",
+    activity_id: notification.activityId,
+    trip_id: notification.tripId || state.currentTripId,
+    handled: Boolean(notification.handled),
+    created_at: notification.createdAt || new Date().toISOString(),
+  }));
+  await supabaseClient.from("notifications").upsert(notifRows, { onConflict: "id" });
+
+  const [remoteTrips, remoteActivities, remoteNotifications] = await Promise.all([
+    supabaseClient.from("trips").select("id"),
+    supabaseClient.from("activities").select("id"),
+    supabaseClient.from("notifications").select("id"),
+  ]);
+  if (!remoteTrips.error) {
+    const localTripIds = new Set(state.trips.map((trip) => trip.id));
+    const deleteTripIds = (remoteTrips.data || []).map((row) => row.id).filter((id) => !localTripIds.has(id));
+    if (deleteTripIds.length) await supabaseClient.from("trips").delete().in("id", deleteTripIds);
+  }
+  if (!remoteActivities.error) {
+    const localActivityIds = new Set(state.activities.map((activity) => activity.id));
+    const deleteActivityIds = (remoteActivities.data || []).map((row) => row.id).filter((id) => !localActivityIds.has(id));
+    if (deleteActivityIds.length) await supabaseClient.from("activities").delete().in("id", deleteActivityIds);
+  }
+  if (!remoteNotifications.error) {
+    const localNotifIds = new Set(state.notifications.map((notification) => notification.id));
+    const deleteNotifIds = (remoteNotifications.data || []).map((row) => row.id).filter((id) => !localNotifIds.has(id));
+    if (deleteNotifIds.length) await supabaseClient.from("notifications").delete().in("id", deleteNotifIds);
+  }
+}
+
+function setupRealtimeSubscriptions() {
+  if (!supabaseClient) return;
+  if (realtimeChannel) {
+    supabaseClient.removeChannel(realtimeChannel);
+  }
+  realtimeChannel = supabaseClient
+    .channel("planner-sync")
+    .on("postgres_changes", { event: "*", schema: "public", table: "trips" }, async () => {
+      await refreshStateFromRemote();
+      renderAll();
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "activities" }, async () => {
+      await refreshStateFromRemote();
+      renderAll();
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, async () => {
+      await refreshStateFromRemote();
+      renderAll();
+    })
+    .subscribe();
 }
 
 async function updateWeatherForecast() {
