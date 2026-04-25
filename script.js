@@ -1,73 +1,57 @@
+const STORAGE_KEY = "trip-planner-local-v3";
 const DEFAULT_MEMBERS = ["Anthony", "Vivian", "Jason", "Darrell"];
-const SUPABASE_CONFIG_KEY = "madeira-supabase-config-v1";
-const ACTIVE_USER_KEY = "madeira-active-user-v1";
-const CURRENT_TRIP_KEY = "madeira-current-trip-v1";
+const DEFAULT_TRIP = { id: "madeira-default", name: "Madeira" };
 
-let supabase = null;
-let realtimeChannel = null;
-let isConnected = false;
 let map = null;
 let mapPickMode = false;
 let tempPickMarker = null;
-let wmsLayer = null;
+let selectedDay = "";
+let wmsDiscoveredLayers = [];
+const wmsLayerMap = new Map();
 const markerByActivityId = new Map();
 
-let members = [...DEFAULT_MEMBERS];
-let trips = [];
-let activities = [];
-let comments = [];
-let votes = [];
-let notificationActions = [];
-let activeUser = localStorage.getItem(ACTIVE_USER_KEY) || DEFAULT_MEMBERS[0];
-let currentTripId = localStorage.getItem(CURRENT_TRIP_KEY) || null;
+let state = loadState();
 
 const currentUserSelect = document.querySelector("#current-user");
+const memberList = document.querySelector("#member-list");
+const tripName = document.querySelector("#trip-name");
 const notificationList = document.querySelector("#notification-list");
-const supabaseForm = document.querySelector("#supabase-form");
-const supabaseUrlInput = document.querySelector("#supabase-url");
-const supabaseAnonInput = document.querySelector("#supabase-anon-key");
-const connectionStatus = document.querySelector("#connection-status");
-const tripSelector = document.querySelector("#trip-selector");
-const newTripButton = document.querySelector("#new-trip-btn");
-const totalTripCost = document.querySelector("#total-trip-cost");
-const costPerPerson = document.querySelector("#cost-per-person");
-const wmsUrlInput = document.querySelector("#wms-url");
-const wmsLayerNameInput = document.querySelector("#wms-layer-name");
-const applyWmsOverlayButton = document.querySelector("#apply-wms-overlay");
+const selectedDayInput = document.querySelector("#selected-day");
+const dailyActivityList = document.querySelector("#daily-activity-list");
 const activityForm = document.querySelector("#activity-form");
-const activityList = document.querySelector("#activity-list");
 const clearDataButton = document.querySelector("#clear-data");
 const pickOnMapButton = document.querySelector("#place-on-map");
-const activityTemplate = document.querySelector("#activity-template");
-const tripModal = document.querySelector("#trip-modal");
-const tripForm = document.querySelector("#trip-form");
-const closeTripModalButton = document.querySelector("#close-trip-modal");
-const setupBanner = document.querySelector("#setup-banner");
+const activityTagsHost = document.querySelector("#activity-tags");
+const openWmsModalButton = document.querySelector("#open-wms-modal");
+const wmsModal = document.querySelector("#wms-modal");
+const closeWmsModalButton = document.querySelector("#close-wms-modal");
+const loadWmsLayersButton = document.querySelector("#load-wms-layers");
+const addSelectedLayersButton = document.querySelector("#add-selected-layers");
+const wmsUrlInput = document.querySelector("#wms-url-input");
+const wmsError = document.querySelector("#wms-error");
+const wmsLayerSelector = document.querySelector("#wms-layer-selector");
+const wmsLayerOptions = document.querySelector("#wms-layer-options");
+const activeLayerList = document.querySelector("#active-layer-list");
 
 const fields = {
   title: document.querySelector("#activity-title"),
   day: document.querySelector("#activity-day"),
   time: document.querySelector("#activity-time"),
-  cost: document.querySelector("#activity-cost"),
+  category: document.querySelector("#activity-category"),
   notes: document.querySelector("#activity-notes"),
   location: document.querySelector("#activity-location"),
   lat: document.querySelector("#activity-lat"),
   lng: document.querySelector("#activity-lng"),
 };
 
-const tripFields = {
-  name: document.querySelector("#trip-name"),
-  startDate: document.querySelector("#trip-start-date"),
-  endDate: document.querySelector("#trip-end-date"),
-  currency: document.querySelector("#trip-currency"),
-};
-
 init();
 
 function init() {
+  tripName.textContent = DEFAULT_TRIP.name;
   setupMap();
   setupHandlers();
-  hydrateSupabaseConfig();
+  selectedDayInput.value = todayIso();
+  selectedDay = selectedDayInput.value;
   renderAll();
 }
 
@@ -79,15 +63,11 @@ function setupMap() {
   }).addTo(map);
 
   map.on("click", (event) => {
-    if (!mapPickMode) {
-      return;
-    }
+    if (!mapPickMode) return;
     const { lat, lng } = event.latlng;
     fields.lat.value = lat.toFixed(5);
     fields.lng.value = lng.toFixed(5);
-    if (tempPickMarker) {
-      tempPickMarker.remove();
-    }
+    if (tempPickMarker) tempPickMarker.remove();
     tempPickMarker = L.marker([lat, lng]).addTo(map).bindPopup("Selected point").openPopup();
     mapPickMode = false;
     pickOnMapButton.textContent = "Pick on Map";
@@ -97,496 +77,158 @@ function setupMap() {
 function setupHandlers() {
   fields.day.addEventListener("click", openDayPicker);
   fields.day.addEventListener("focus", openDayPicker);
+  selectedDayInput.addEventListener("click", openSelectedDayPicker);
+  selectedDayInput.addEventListener("focus", openSelectedDayPicker);
+  selectedDayInput.addEventListener("change", () => {
+    selectedDay = selectedDayInput.value;
+    renderDailyActivities();
+  });
 
   currentUserSelect.addEventListener("change", () => {
-    activeUser = currentUserSelect.value;
-    localStorage.setItem(ACTIVE_USER_KEY, activeUser);
+    state.activeUser = currentUserSelect.value;
+    saveState();
     renderNotifications();
   });
 
-  tripSelector.addEventListener("change", async () => {
-    currentTripId = tripSelector.value || null;
-    localStorage.setItem(CURRENT_TRIP_KEY, currentTripId || "");
-    syncActivityDateBounds();
-    await refreshAllData();
+  openWmsModalButton.addEventListener("click", () => {
+    resetWmsModalState();
+    wmsModal.classList.remove("hidden");
   });
-
-  newTripButton.addEventListener("click", () => {
-    if (!tripModal) {
-      return;
-    }
-    tripModal.classList.remove("hidden");
-  });
-
-  if (closeTripModalButton && tripModal && tripForm) {
-    closeTripModalButton.addEventListener("click", () => {
-      tripModal.classList.add("hidden");
-      tripForm.reset();
-    });
-  }
-
-  if (tripForm && tripModal) {
-    tripForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (!isConnected) {
-        setConnectionStatus("Connect Supabase first.", "warn");
-        return;
-      }
-      const payload = {
-        name: tripFields.name.value.trim(),
-        start_date: tripFields.startDate.value || null,
-        end_date: tripFields.endDate.value || null,
-        base_currency: tripFields.currency.value || "EUR",
-      };
-      if (!payload.name) {
-        return;
-      }
-      const { data, error } = await supabase.from("trips").insert(payload).select("id").single();
-      if (error) {
-        setConnectionStatus(error.message, "warn");
-        return;
-      }
-      currentTripId = data.id;
-      localStorage.setItem(CURRENT_TRIP_KEY, currentTripId);
-      tripModal.classList.add("hidden");
-      tripForm.reset();
-      await refreshAllData();
-    });
-  }
-
-  applyWmsOverlayButton.addEventListener("click", () => {
-    const url = wmsUrlInput.value.trim();
-    const layerName = wmsLayerNameInput.value.trim();
-    if (!url || !layerName) {
-      return;
-    }
-    applyWmsOverlay(url, layerName);
-  });
-
-  supabaseForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const url = supabaseUrlInput.value.trim();
-    const anonKey = supabaseAnonInput.value.trim();
-    if (!url || !anonKey) {
-      setConnectionStatus("Enter both Supabase URL and anon key.", "warn");
-      return;
-    }
-    localStorage.setItem(SUPABASE_CONFIG_KEY, JSON.stringify({ url, anonKey }));
-    await connectSupabase(url, anonKey);
-  });
+  closeWmsModalButton.addEventListener("click", () => wmsModal.classList.add("hidden"));
+  loadWmsLayersButton.addEventListener("click", loadWmsLayersFromUrl);
+  addSelectedLayersButton.addEventListener("click", addSelectedWmsLayers);
 
   pickOnMapButton.addEventListener("click", () => {
     mapPickMode = !mapPickMode;
     pickOnMapButton.textContent = mapPickMode ? "Click map to set point" : "Pick on Map";
   });
 
-  activityForm.addEventListener("submit", async (event) => {
+  activityForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (!isConnected) {
-      setConnectionStatus("Connect Supabase first.", "warn");
-      return;
-    }
-    if (!currentTripId) {
-      setConnectionStatus("Create/select a trip first.", "warn");
-      return;
-    }
-
-    const payload = {
+    const activity = {
+      id: crypto.randomUUID(),
       title: fields.title.value.trim(),
       day: fields.day.value.trim(),
       time: fields.time.value.trim(),
-      cost: Number(fields.cost.value || 0),
+      category: fields.category.value,
       notes: fields.notes.value.trim(),
       location: fields.location.value.trim(),
       lat: Number.isFinite(Number(fields.lat.value)) ? Number(fields.lat.value) : null,
       lng: Number.isFinite(Number(fields.lng.value)) ? Number(fields.lng.value) : null,
-      created_by: activeUser,
-      trip_id: currentTripId,
+      taggedMembers: selectedTaggedMembers(),
+      createdAt: new Date().toISOString(),
     };
-    if (!payload.title || !payload.day || !payload.time) {
-      return;
-    }
-
-    const { error } = await supabase.from("activities").insert(payload);
-    if (error) {
-      setConnectionStatus(error.message, "warn");
-      return;
-    }
-
+    if (!activity.title || !activity.day || !activity.time) return;
+    state.activities.push(activity);
+    createTagNotifications(activity);
     activityForm.reset();
-    fields.cost.value = "0";
     if (tempPickMarker) {
       tempPickMarker.remove();
       tempPickMarker = null;
     }
-    syncActivityDateBounds();
-    await refreshAllData();
+    selectedDayInput.value = activity.day;
+    selectedDay = activity.day;
+    saveState();
+    renderAll();
   });
 
-  clearDataButton.addEventListener("click", async () => {
-    if (!isConnected || !currentTripId) {
-      return;
-    }
-    const accepted = window.confirm("Delete all activities, comments, votes, and mention actions for this trip?");
-    if (!accepted) {
-      return;
-    }
-    const ids = activities.map((item) => item.id);
-    if (ids.length) {
-      await supabase.from("votes").delete().in("activity_id", ids);
-      await supabase.from("comments").delete().in("activity_id", ids);
-      await supabase.from("activities").delete().in("id", ids);
-    }
-    await refreshAllData();
+  clearDataButton.addEventListener("click", () => {
+    if (!window.confirm("Reset all activities, layers, and notifications?")) return;
+    state = defaultState();
+    selectedDayInput.value = todayIso();
+    selectedDay = selectedDayInput.value;
+    wmsLayerMap.forEach((entry) => map.removeLayer(entry.layer));
+    wmsLayerMap.clear();
+    saveState();
+    renderAll();
   });
-}
-
-function hydrateSupabaseConfig() {
-  const raw = localStorage.getItem(SUPABASE_CONFIG_KEY);
-  if (!raw) {
-    setConnectionStatus("Not connected", "");
-    renderCurrentUserOptions();
-    return;
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    supabaseUrlInput.value = parsed.url || "";
-    supabaseAnonInput.value = parsed.anonKey || "";
-    if (parsed.url && parsed.anonKey) {
-      connectSupabase(parsed.url, parsed.anonKey);
-    }
-  } catch {
-    setConnectionStatus("Not connected", "");
-    renderCurrentUserOptions();
-  }
-}
-
-async function connectSupabase(url, anonKey) {
-  if (!window.supabase) {
-    setConnectionStatus("Supabase library failed to load.", "warn");
-    return;
-  }
-  supabase = window.supabase.createClient(url, anonKey);
-  setConnectionStatus("Connecting...", "");
-  const { error } = await supabase.from("members").select("name").limit(1);
-  if (error) {
-    isConnected = false;
-    setConnectionStatus(`Connection failed: ${error.message}`, "warn");
-    return;
-  }
-  isConnected = true;
-  setConnectionStatus("Connected to shared board.", "ok");
-  clearSetupBanner();
-  const migrationOk = await checkMigrationHealth();
-  if (!migrationOk) {
-    return;
-  }
-  await ensureDefaultMembers();
-  await ensureDefaultTrip();
-  await refreshAllData();
-  subscribeRealtime();
-}
-
-async function checkMigrationHealth() {
-  const checks = await Promise.all([
-    supabase.from("trips").select("id").limit(1),
-    supabase.from("votes").select("id").limit(1),
-    supabase.from("activities").select("id,trip_id,cost").limit(1),
-  ]);
-  const failed = checks.find((result) => result.error);
-  if (!failed) {
-    clearSetupBanner();
-    return true;
-  }
-  const message = failed.error?.message || "Schema validation failed.";
-  showSetupBanner(
-    `Database migration missing or incomplete. Re-run supabase-schema.sql in Supabase SQL Editor, then reconnect. (${message})`
-  );
-  setConnectionStatus("Migration required. Run schema SQL.", "warn");
-  return false;
-}
-
-function subscribeRealtime() {
-  if (realtimeChannel) {
-    supabase.removeChannel(realtimeChannel);
-  }
-  realtimeChannel = supabase
-    .channel("madeira-board-changes")
-    .on("postgres_changes", { event: "*", schema: "public", table: "members" }, () => refreshAllData())
-    .on("postgres_changes", { event: "*", schema: "public", table: "trips" }, () => refreshAllData())
-    .on("postgres_changes", { event: "*", schema: "public", table: "activities" }, () => refreshAllData())
-    .on("postgres_changes", { event: "*", schema: "public", table: "comments" }, () => refreshAllData())
-    .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, () => refreshAllData())
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "notification_actions" },
-      () => refreshAllData()
-    )
-    .subscribe();
-}
-
-async function ensureDefaultMembers() {
-  const rows = DEFAULT_MEMBERS.map((name) => ({ name }));
-  await supabase.from("members").upsert(rows, { onConflict: "name", ignoreDuplicates: true });
-}
-
-async function ensureDefaultTrip() {
-  const { data } = await supabase.from("trips").select("id").order("created_at", { ascending: true }).limit(1);
-  if (data && data.length) {
-    if (!currentTripId) {
-      currentTripId = data[0].id;
-      localStorage.setItem(CURRENT_TRIP_KEY, currentTripId);
-    }
-    return;
-  }
-  const { data: created } = await supabase
-    .from("trips")
-    .insert({ name: "Madeira", base_currency: "EUR" })
-    .select("id")
-    .single();
-  currentTripId = created.id;
-  localStorage.setItem(CURRENT_TRIP_KEY, currentTripId);
-}
-
-async function refreshAllData() {
-  if (!isConnected) {
-    return;
-  }
-
-  const [membersResult, tripsResult] = await Promise.all([
-    supabase.from("members").select("name").order("name", { ascending: true }),
-    supabase.from("trips").select("*").order("created_at", { ascending: true }),
-  ]);
-  if (membersResult.error || tripsResult.error) {
-    setConnectionStatus("Refresh failed. Check schema/RLS setup.", "warn");
-    return;
-  }
-  members = membersResult.data.map((item) => item.name);
-  trips = tripsResult.data;
-
-  if (!trips.length) {
-    activities = [];
-    comments = [];
-    votes = [];
-    notificationActions = [];
-    renderAll();
-    return;
-  }
-
-  if (!trips.some((trip) => trip.id === currentTripId)) {
-    currentTripId = trips[0].id;
-    localStorage.setItem(CURRENT_TRIP_KEY, currentTripId);
-  }
-
-  if (!members.includes(activeUser)) {
-    activeUser = members[0] || DEFAULT_MEMBERS[0];
-    localStorage.setItem(ACTIVE_USER_KEY, activeUser);
-  }
-
-  const activitiesResult = await supabase
-    .from("activities")
-    .select("*")
-    .eq("trip_id", currentTripId);
-  if (activitiesResult.error) {
-    setConnectionStatus("Refresh failed. Could not load activities.", "warn");
-    return;
-  }
-  activities = activitiesResult.data;
-
-  const activityIds = activities.map((item) => item.id);
-  if (!activityIds.length) {
-    comments = [];
-    votes = [];
-    notificationActions = [];
-    renderAll();
-    return;
-  }
-
-  const [commentsResult, votesResult] = await Promise.all([
-    supabase.from("comments").select("*").in("activity_id", activityIds),
-    supabase.from("votes").select("*").in("activity_id", activityIds),
-  ]);
-  if (commentsResult.error || votesResult.error) {
-    setConnectionStatus("Refresh failed. Could not load comments or votes.", "warn");
-    return;
-  }
-  comments = commentsResult.data;
-  votes = votesResult.data;
-
-  const commentIds = comments.map((item) => item.id);
-  if (!commentIds.length) {
-    notificationActions = [];
-  } else {
-    const actionsResult = await supabase.from("notification_actions").select("*").in("comment_id", commentIds);
-    if (actionsResult.error) {
-      setConnectionStatus("Refresh failed. Could not load notifications.", "warn");
-      return;
-    }
-    notificationActions = actionsResult.data;
-  }
-
-  renderAll();
 }
 
 function renderAll() {
   renderCurrentUserOptions();
-  renderTripSelector();
-  renderBudgetSummary();
-  syncActivityDateBounds();
-  renderActivities();
+  renderMembers();
+  renderTagMemberCheckboxes();
+  renderDailyActivities();
   renderNotifications();
   renderMapPins();
+  renderActiveLayersPanel();
 }
 
 function renderCurrentUserOptions() {
   currentUserSelect.innerHTML = "";
-  (members.length ? members : DEFAULT_MEMBERS).forEach((member) => {
+  state.members.forEach((member) => {
     const option = document.createElement("option");
     option.value = member;
     option.textContent = member;
-    if (member === activeUser) {
-      option.selected = true;
-    }
+    if (member === state.activeUser) option.selected = true;
     currentUserSelect.appendChild(option);
   });
 }
 
-function renderTripSelector() {
-  tripSelector.innerHTML = "";
-  trips.forEach((trip) => {
-    const option = document.createElement("option");
-    option.value = trip.id;
-    option.textContent = trip.name;
-    if (trip.id === currentTripId) {
-      option.selected = true;
-    }
-    tripSelector.appendChild(option);
+function renderMembers() {
+  memberList.innerHTML = "";
+  state.members.forEach((member) => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = member;
+    memberList.appendChild(chip);
   });
 }
 
-function renderBudgetSummary() {
-  const currentTrip = getCurrentTrip();
-  const currency = currentTrip?.base_currency || "EUR";
-  const total = activities.reduce((sum, activity) => sum + Number(activity.cost || 0), 0);
-  const perPerson = members.length ? total / members.length : total;
-  totalTripCost.textContent = `${currency} ${total.toFixed(2)}`;
-  costPerPerson.textContent = `${currency} ${perPerson.toFixed(2)}`;
+function renderTagMemberCheckboxes() {
+  activityTagsHost.innerHTML = "";
+  state.members.forEach((member) => {
+    const label = document.createElement("label");
+    label.className = "chip";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = member;
+    checkbox.name = "tag-member";
+    label.appendChild(checkbox);
+    label.append(member);
+    activityTagsHost.appendChild(label);
+  });
 }
 
-function renderActivities() {
-  activityList.innerHTML = "";
-  if (!activities.length) {
+function renderDailyActivities() {
+  dailyActivityList.innerHTML = "";
+  const filtered = state.activities
+    .filter((activity) => !selectedDay || activity.day === selectedDay)
+    .sort(compareActivitiesByDayThenTime);
+  if (!filtered.length) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "No activities yet for this trip.";
-    activityList.appendChild(empty);
+    empty.textContent = "No activities for selected day.";
+    dailyActivityList.appendChild(empty);
     return;
   }
-
-  const sorted = [...activities].sort(compareActivitiesByDayThenTime);
-  const currentTrip = getCurrentTrip();
-  const currency = currentTrip?.base_currency || "EUR";
-
-  sorted.forEach((activity) => {
-    const node = activityTemplate.content.firstElementChild.cloneNode(true);
-    node.dataset.activityId = activity.id;
-    node.querySelector(".activity-title").textContent = activity.title;
-    node.querySelector(".meta").textContent = `${formatDayDisplay(activity.day)} at ${activity.time}${
+  filtered.forEach((activity) => {
+    const card = document.createElement("article");
+    card.className = "layer-item";
+    const heading = document.createElement("p");
+    heading.innerHTML = `<strong>${activity.category} ${escapeHtml(activity.title)}</strong>`;
+    const meta = document.createElement("p");
+    meta.className = "meta";
+    meta.textContent = `${formatDayDisplay(activity.day)} at ${activity.time}${
       activity.location ? ` • ${activity.location}` : ""
     }`;
-    node.querySelector(".cost").textContent = `Cost: ${currency} ${Number(activity.cost || 0).toFixed(2)}`;
-    node.querySelector(".notes").textContent = activity.notes || "No notes yet.";
-
-    const activityVotes = votes.filter((vote) => vote.activity_id === activity.id);
-    node.querySelector(".vote-count").textContent = `${activityVotes.length} vote${activityVotes.length === 1 ? "" : "s"}`;
-    const voters = activityVotes.map((vote) => vote.user_name).join(", ");
-    node.querySelector(".vote-users").textContent = voters ? `Liked by: ${voters}` : "No votes yet.";
-
-    node.querySelector(".vote-activity").addEventListener("click", async () => {
-      if (!isConnected) {
-        return;
-      }
-      const existing = activityVotes.find((vote) => vote.user_name === activeUser);
-      if (existing) {
-        await supabase.from("votes").delete().eq("id", existing.id);
-      } else {
-        await supabase.from("votes").insert({ activity_id: activity.id, user_name: activeUser });
-      }
-      await refreshAllData();
-    });
-
-    node.querySelector(".delete-activity").addEventListener("click", async () => {
-      if (!isConnected) {
-        return;
-      }
-      await supabase.from("activities").delete().eq("id", activity.id);
-      await refreshAllData();
-    });
-
-    renderCommentBlock(node, activity);
-    activityList.appendChild(node);
-  });
-}
-
-function renderCommentBlock(cardNode, activity) {
-  const mentionsHost = cardNode.querySelector(".mentions");
-  const commentList = cardNode.querySelector(".comment-list");
-  const commentForm = cardNode.querySelector(".comment-form");
-  const commentInput = commentForm.querySelector("textarea");
-  const activityComments = comments.filter((item) => item.activity_id === activity.id);
-
-  const mentionSet = new Set();
-  activityComments.forEach((comment) => {
-    extractMentions(comment.text).forEach((name) => mentionSet.add(name));
-  });
-  mentionsHost.innerHTML = "";
-  if (mentionSet.size) {
-    [...mentionSet].forEach((name) => {
-      const mention = document.createElement("span");
-      mention.className = "mention";
-      mention.textContent = `@${name}`;
-      mentionsHost.appendChild(mention);
-    });
-  }
-
-  commentList.innerHTML = "";
-  activityComments
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-    .forEach((comment) => {
-      const line = document.createElement("div");
-      line.className = "comment";
-      line.textContent = `${comment.author}: ${comment.text}`;
-      commentList.appendChild(line);
-    });
-
-  commentForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const text = commentInput.value.trim();
-    if (!text || !isConnected) {
-      return;
-    }
-    await supabase.from("comments").insert({
-      activity_id: activity.id,
-      author: activeUser,
-      text,
-    });
-    commentInput.value = "";
-    await refreshAllData();
+    const notes = document.createElement("p");
+    notes.textContent = activity.notes || "No details";
+    const tags = document.createElement("p");
+    tags.className = "meta";
+    tags.textContent = activity.taggedMembers.length
+      ? `Tagged: ${activity.taggedMembers.join(", ")}`
+      : "Tagged: none";
+    card.append(heading, meta, notes, tags);
+    dailyActivityList.appendChild(card);
   });
 }
 
 function renderNotifications() {
   notificationList.innerHTML = "";
-  const unhandled = comments.filter((comment) => {
-    const mentions = extractMentions(comment.text);
-    if (!mentions.includes(activeUser)) {
-      return false;
-    }
-    return !notificationActions.some(
-      (action) => action.comment_id === comment.id && action.user_name === activeUser
-    );
-  });
-
+  const unhandled = state.notifications.filter(
+    (notification) => notification.userName === state.activeUser && !notification.handled
+  );
   if (!unhandled.length) {
     const empty = document.createElement("p");
     empty.className = "empty";
@@ -594,35 +236,25 @@ function renderNotifications() {
     notificationList.appendChild(empty);
     return;
   }
-
   unhandled
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-    .forEach((comment) => {
-      const activity = activities.find((item) => item.id === comment.activity_id);
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .forEach((notification) => {
+      const activity = state.activities.find((item) => item.id === notification.activityId);
       const card = document.createElement("div");
       card.className = "notification-card";
       const message = document.createElement("p");
-      message.textContent = `${comment.author} tagged you on ${
+      message.textContent = `${notification.fromUser} tagged you on ${
         activity ? activity.title : "an activity"
-      }: "${comment.text}"`;
+      }.`;
       const button = document.createElement("button");
       button.className = "small";
       button.textContent = "Mark addressed";
-      button.addEventListener("click", async () => {
-        if (!isConnected) {
-          return;
-        }
-        await supabase.from("notification_actions").upsert(
-          {
-            comment_id: comment.id,
-            user_name: activeUser,
-          },
-          { onConflict: "comment_id,user_name" }
-        );
-        await refreshAllData();
+      button.addEventListener("click", () => {
+        notification.handled = true;
+        saveState();
+        renderNotifications();
       });
-      card.appendChild(message);
-      card.appendChild(button);
+      card.append(message, button);
       notificationList.appendChild(card);
     });
 }
@@ -630,10 +262,8 @@ function renderNotifications() {
 function renderMapPins() {
   markerByActivityId.forEach((marker) => marker.remove());
   markerByActivityId.clear();
-  activities.forEach((activity) => {
-    if (!Number.isFinite(activity.lat) || !Number.isFinite(activity.lng)) {
-      return;
-    }
+  state.activities.forEach((activity) => {
+    if (!Number.isFinite(activity.lat) || !Number.isFinite(activity.lng)) return;
     const marker = L.marker([activity.lat, activity.lng]).addTo(map);
     marker.bindPopup(
       `<strong>${escapeHtml(activity.title)}</strong><br>${escapeHtml(formatDayDisplay(activity.day))} ${escapeHtml(
@@ -644,72 +274,216 @@ function renderMapPins() {
   });
 }
 
-function syncActivityDateBounds() {
-  const currentTrip = getCurrentTrip();
-  if (!currentTrip) {
-    fields.day.removeAttribute("min");
-    fields.day.removeAttribute("max");
+async function loadWmsLayersFromUrl() {
+  const baseUrl = wmsUrlInput.value.trim();
+  if (!baseUrl) {
+    showWmsError("Enter a WMS URL.");
     return;
   }
-  if (currentTrip.start_date) {
-    fields.day.min = currentTrip.start_date;
-  } else {
-    fields.day.removeAttribute("min");
-  }
-  if (currentTrip.end_date) {
-    fields.day.max = currentTrip.end_date;
-  } else {
-    fields.day.removeAttribute("max");
+  clearWmsError();
+  wmsLayerSelector.classList.add("hidden");
+  wmsLayerOptions.innerHTML = "";
+  try {
+    const response = await fetch(buildGetCapabilitiesUrl(baseUrl));
+    if (!response.ok) throw new Error(`Request failed (${response.status})`);
+    const xmlText = await response.text();
+    const xml = new DOMParser().parseFromString(xmlText, "text/xml");
+    if (xml.querySelector("parsererror")) throw new Error("Could not parse WMS capabilities.");
+    wmsDiscoveredLayers = extractNamedLayers(xml);
+    if (!wmsDiscoveredLayers.length) throw new Error("No selectable layers found at that URL.");
+    renderWmsLayerOptions();
+    wmsLayerSelector.classList.remove("hidden");
+  } catch (error) {
+    showWmsError(error.message || "Unable to load WMS layers.");
   }
 }
 
-function applyWmsOverlay(url, layerName) {
-  if (wmsLayer) {
-    map.removeLayer(wmsLayer);
-  }
-  wmsLayer = L.tileLayer.wms(url, {
-    layers: layerName,
-    format: "image/png",
-    transparent: true,
+function renderWmsLayerOptions() {
+  wmsLayerOptions.innerHTML = "";
+  wmsDiscoveredLayers.forEach((layer) => {
+    const label = document.createElement("label");
+    label.className = "layer-item";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = layer.name;
+    checkbox.dataset.title = layer.title || layer.name;
+    label.appendChild(checkbox);
+    label.append(` ${layer.title || layer.name}`);
+    wmsLayerOptions.appendChild(label);
   });
-  wmsLayer.addTo(map);
 }
 
-function getCurrentTrip() {
-  return trips.find((trip) => trip.id === currentTripId) || null;
+function addSelectedWmsLayers() {
+  const selected = [...wmsLayerOptions.querySelectorAll("input[type='checkbox']:checked")];
+  if (!selected.length) {
+    showWmsError("Select at least one layer.");
+    return;
+  }
+  const url = wmsUrlInput.value.trim();
+  selected.forEach((input) => {
+    if (wmsLayerMap.has(input.value)) return;
+    const layer = L.tileLayer.wms(url, { layers: input.value, format: "image/png", transparent: true }).addTo(map);
+    wmsLayerMap.set(input.value, {
+      name: input.value,
+      title: input.dataset.title || input.value,
+      layer,
+      visible: true,
+    });
+  });
+  renderActiveLayersPanel();
+  wmsModal.classList.add("hidden");
+}
+
+function renderActiveLayersPanel() {
+  activeLayerList.innerHTML = "";
+  if (!wmsLayerMap.size) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "No WMS layers active.";
+    activeLayerList.appendChild(empty);
+    return;
+  }
+  wmsLayerMap.forEach((entry) => {
+    const item = document.createElement("div");
+    item.className = "layer-item";
+    const top = document.createElement("p");
+    top.innerHTML = `<strong>${escapeHtml(entry.title)}</strong>`;
+    const row = document.createElement("div");
+    row.className = "row";
+    const toggle = document.createElement("button");
+    toggle.className = "small";
+    toggle.textContent = entry.visible ? "Hide" : "Show";
+    toggle.addEventListener("click", () => {
+      entry.visible = !entry.visible;
+      if (entry.visible) entry.layer.addTo(map);
+      else map.removeLayer(entry.layer);
+      renderActiveLayersPanel();
+    });
+    const remove = document.createElement("button");
+    remove.className = "small danger";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", () => {
+      map.removeLayer(entry.layer);
+      wmsLayerMap.delete(entry.name);
+      renderActiveLayersPanel();
+    });
+    row.append(toggle, remove);
+    item.append(top, row);
+    activeLayerList.appendChild(item);
+  });
+}
+
+function buildGetCapabilitiesUrl(url) {
+  return `${url}${url.includes("?") ? "&" : "?"}service=WMS&request=GetCapabilities`;
+}
+
+function extractNamedLayers(xmlDoc) {
+  return [...xmlDoc.querySelectorAll("Layer")]
+    .map((layerNode) => {
+      const nameNode = layerNode.querySelector(":scope > Name");
+      if (!nameNode?.textContent) return null;
+      const titleNode = layerNode.querySelector(":scope > Title");
+      return {
+        name: nameNode.textContent.trim(),
+        title: titleNode?.textContent?.trim() || nameNode.textContent.trim(),
+      };
+    })
+    .filter(Boolean);
+}
+
+function showWmsError(message) {
+  wmsError.textContent = message;
+  wmsError.classList.remove("hidden");
+}
+
+function clearWmsError() {
+  wmsError.textContent = "";
+  wmsError.classList.add("hidden");
+}
+
+function resetWmsModalState() {
+  clearWmsError();
+  wmsLayerSelector.classList.add("hidden");
+  wmsLayerOptions.innerHTML = "";
+  wmsDiscoveredLayers = [];
+}
+
+function selectedTaggedMembers() {
+  return [...activityTagsHost.querySelectorAll("input[type='checkbox']:checked")].map((input) => input.value);
+}
+
+function createTagNotifications(activity) {
+  activity.taggedMembers
+    .filter((name) => name !== state.activeUser)
+    .forEach((userName) => {
+      state.notifications.push({
+        id: crypto.randomUUID(),
+        userName,
+        fromUser: state.activeUser,
+        activityId: activity.id,
+        handled: false,
+        createdAt: new Date().toISOString(),
+      });
+    });
+}
+
+function defaultState() {
+  return {
+    trip: DEFAULT_TRIP,
+    members: [...DEFAULT_MEMBERS],
+    activeUser: DEFAULT_MEMBERS[0],
+    activities: [],
+    notifications: [],
+  };
+}
+
+function loadState() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return defaultState();
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.activities) || !Array.isArray(parsed.members)) return defaultState();
+    return {
+      trip: parsed.trip || DEFAULT_TRIP,
+      members: parsed.members.length ? parsed.members : [...DEFAULT_MEMBERS],
+      activeUser: parsed.activeUser || DEFAULT_MEMBERS[0],
+      activities: parsed.activities,
+      notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [],
+    };
+  } catch {
+    return defaultState();
+  }
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 function openDayPicker() {
-  if (typeof fields.day.showPicker === "function") {
-    fields.day.showPicker();
-  }
+  if (typeof fields.day.showPicker === "function") fields.day.showPicker();
+}
+
+function openSelectedDayPicker() {
+  if (typeof selectedDayInput.showPicker === "function") selectedDayInput.showPicker();
 }
 
 function compareActivitiesByDayThenTime(a, b) {
   const dayCompare = normalizeDayForSort(a.day).localeCompare(normalizeDayForSort(b.day));
-  if (dayCompare !== 0) {
-    return dayCompare;
-  }
+  if (dayCompare !== 0) return dayCompare;
   return String(a.time || "").localeCompare(String(b.time || ""));
 }
 
 function normalizeDayForSort(dayText) {
   const raw = String(dayText || "").trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    return raw;
-  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
   const parsed = new Date(raw);
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
-  }
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
   return raw;
 }
 
 function formatDayDisplay(dayText) {
   const normalized = normalizeDayForSort(dayText);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-    return String(dayText || "");
-  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return String(dayText || "");
   const [year, month, day] = normalized.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
   return new Intl.DateTimeFormat(undefined, {
@@ -721,33 +495,8 @@ function formatDayDisplay(dayText) {
   }).format(date);
 }
 
-function extractMentions(text) {
-  const mentionMatches = String(text || "").match(/@([A-Za-z0-9 _.-]{1,24})/g) || [];
-  return mentionMatches.map((tag) => tag.slice(1).trim());
-}
-
-function setConnectionStatus(message, stateClass) {
-  connectionStatus.textContent = message;
-  connectionStatus.className = "status-text";
-  if (stateClass) {
-    connectionStatus.classList.add(stateClass);
-  }
-}
-
-function showSetupBanner(message) {
-  if (!setupBanner) {
-    return;
-  }
-  setupBanner.textContent = message;
-  setupBanner.classList.remove("hidden");
-}
-
-function clearSetupBanner() {
-  if (!setupBanner) {
-    return;
-  }
-  setupBanner.textContent = "";
-  setupBanner.classList.add("hidden");
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function escapeHtml(text) {

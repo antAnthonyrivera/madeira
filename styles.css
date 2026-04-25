@@ -46,16 +46,6 @@ h2 {
   margin-bottom: 0.7rem;
 }
 
-.layout {
-  padding: 1rem;
-  display: grid;
-  grid-template-columns: 260px 1.2fr 1fr;
-  grid-template-areas:
-    "insights map activity"
-    "plans plans plans";
-  gap: 1rem;
-}
-
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -63,43 +53,42 @@ h2 {
   padding: 0.9rem;
 }
 
-.insights-panel {
-  grid-area: insights;
+.layout {
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  grid-template-rows: minmax(420px, 58vh) auto;
+  gap: 1rem;
 }
 
-.map-panel {
-  grid-area: map;
+.quadrant-1 {
+  grid-column: 1;
+  grid-row: 1;
 }
 
-.activity-panel {
-  grid-area: activity;
+.quadrant-2 {
+  grid-column: 2;
+  grid-row: 1;
 }
 
-.plans-panel {
-  grid-area: plans;
+.quadrant-3 {
+  grid-column: 1;
+  grid-row: 2;
 }
 
-.connection-box {
-  min-width: 330px;
+.quadrant-4 {
+  grid-column: 2;
+  grid-row: 2;
 }
 
-.connection-box summary {
-  cursor: pointer;
-  color: var(--muted);
-}
-
-.setup-banner {
-  margin: 0.65rem 1rem 0;
-  padding: 0.6rem 0.8rem;
-  border-radius: 10px;
-  border: 1px solid #f3d7a1;
-  background: #fff7e6;
-  color: #7c4a03;
-  font-size: 0.9rem;
+.map-wrap {
+  position: relative;
+  height: calc(100% - 32px);
+  min-height: 360px;
 }
 
 #map {
-  height: 420px;
+  height: 100%;
   border-radius: 10px;
   border: 1px solid var(--line);
 }
@@ -117,6 +106,10 @@ h2 {
 
 .between {
   justify-content: space-between;
+}
+
+.tight-bottom {
+  margin-bottom: 0.4rem;
 }
 
 input,
@@ -169,12 +162,8 @@ button.small {
   font-size: 0.85rem;
 }
 
-.activity-card {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.75rem;
-  display: grid;
-  gap: 0.55rem;
+.chip input {
+  margin-right: 0.25rem;
 }
 
 .meta {
@@ -237,19 +226,6 @@ button.small {
   margin-bottom: 0.35rem;
 }
 
-.vote-row {
-  align-items: center;
-}
-
-.vote-count {
-  font-size: 0.88rem;
-  color: var(--muted);
-}
-
-.cost {
-  font-weight: 600;
-}
-
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -271,22 +247,58 @@ button.small {
   display: none;
 }
 
+.fab {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  font-size: 1.35rem;
+  line-height: 1;
+  padding: 0;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.25);
+}
+
+.active-layers {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  max-width: 360px;
+  max-height: 45%;
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.55rem;
+}
+
+.active-layers h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.9rem;
+}
+
+.layer-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+}
+
 @media (max-width: 1100px) {
   .layout {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      "insights"
-      "map"
-      "activity"
-      "plans";
+    grid-template-rows: auto;
   }
 
-  .connection-box {
-    min-width: 0;
-    width: 100%;
+  .quadrant-1,
+  .quadrant-2,
+  .quadrant-3,
+  .quadrant-4 {
+    grid-column: auto;
+    grid-row: auto;
   }
 
-  #map {
-    height: 330px;
+  .map-wrap {
+    min-height: 330px;
   }
 }
