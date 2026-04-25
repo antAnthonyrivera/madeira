@@ -38,12 +38,13 @@
         </div>
 
         <div class="section-divider"></div>
-        <div class="stack">
-          <label for="selected-day">Selected day</label>
-          <input id="selected-day" type="date" />
-        </div>
-        <div id="range-controls" class="stack hidden">
+        <div id="range-controls" class="stack">
           <label for="range-start">Activity range</label>
+          <div class="row preset-row">
+            <button id="preset-today" type="button" class="small preset-btn">Today</button>
+            <button id="preset-weekend" type="button" class="small preset-btn">This weekend</button>
+            <button id="preset-whole-trip" type="button" class="small preset-btn">Whole trip</button>
+          </div>
           <div class="row">
             <input id="range-start" type="date" />
             <span class="meta">to</span>
@@ -54,19 +55,12 @@
           <p class="meta">Weather forecast loading...</p>
         </div>
         <div class="row between tight-bottom">
-          <h3>Activities</h3>
+          <h3 id="activities-title">Activities (0)</h3>
           <button id="clear-data" class="danger small">Reset</button>
-        </div>
-        <div class="row activity-view-tabs">
-          <button id="activity-view-day" type="button" class="small tab-btn active">Day</button>
-          <button id="activity-view-range" type="button" class="small tab-btn">Range</button>
         </div>
 
         <div id="daily-activity-list" class="stack section-list">
           <p class="empty">No activities for selected day.</p>
-        </div>
-        <div id="range-activity-list" class="stack section-list hidden">
-          <p class="empty">No scheduled activities in selected range.</p>
         </div>
 
         <div class="section-divider"></div>

@@ -10,26 +10,24 @@ let wmsDiscoveredLayers = [];
 const wmsLayerMap = new Map();
 const markerByActivityId = new Map();
 let pendingPinActivityId = null;
-let activityViewMode = "day";
 
 let state = loadState();
 
 const tripSelector = document.querySelector("#trip-selector");
 const addTripButton = document.querySelector("#add-trip-btn");
 const notificationList = document.querySelector("#notification-list");
-const selectedDayInput = document.querySelector("#selected-day");
 const rangeStartInput = document.querySelector("#range-start");
 const rangeEndInput = document.querySelector("#range-end");
 const weatherForecast = document.querySelector("#weather-forecast");
 const mapWeatherBadge = document.querySelector("#map-weather-badge");
 const dailyActivityList = document.querySelector("#daily-activity-list");
-const rangeActivityList = document.querySelector("#range-activity-list");
-const rangeControls = document.querySelector("#range-controls");
-const activityViewDayButton = document.querySelector("#activity-view-day");
-const activityViewRangeButton = document.querySelector("#activity-view-range");
+const activitiesTitle = document.querySelector("#activities-title");
 const notificationFilter = document.querySelector("#notification-filter");
 const clearDataButton = document.querySelector("#clear-data");
 const activeLayerList = document.querySelector("#active-layer-list");
+const presetTodayButton = document.querySelector("#preset-today");
+const presetWeekendButton = document.querySelector("#preset-weekend");
+const presetWholeTripButton = document.querySelector("#preset-whole-trip");
 
 const openWmsModalButton = document.querySelector("#open-wms-modal");
 const wmsModal = document.querySelector("#wms-modal");
@@ -70,8 +68,7 @@ function init() {
   if (DEFAULT_WMS_URL) {
     wmsUrlInput.value = DEFAULT_WMS_URL;
   }
-  selectedDayInput.value = todayIso();
-  selectedDay = selectedDayInput.value;
+  selectedDay = todayIso();
   rangeStartInput.value = selectedDay;
   rangeEndInput.value = selectedDay;
   updateWeatherForecast();
@@ -101,28 +98,24 @@ function setupMap() {
 }
 
 function setupHandlers() {
-  selectedDayInput.addEventListener("click", openSelectedDayPicker);
-  selectedDayInput.addEventListener("focus", openSelectedDayPicker);
-  selectedDayInput.addEventListener("change", () => {
-    selectedDay = selectedDayInput.value;
+  rangeStartInput.addEventListener("change", () => {
+    selectedDay = rangeStartInput.value || todayIso();
     updateWeatherForecast();
     renderDailyActivities();
-    renderRangeActivities();
-  });
-
-  rangeStartInput.addEventListener("change", () => {
-    renderRangeActivities();
   });
 
   rangeEndInput.addEventListener("change", () => {
-    renderRangeActivities();
+    renderDailyActivities();
   });
 
-  activityViewDayButton.addEventListener("click", () => {
-    setActivityViewMode("day");
+  presetTodayButton.addEventListener("click", () => {
+    applyPresetToday();
   });
-  activityViewRangeButton.addEventListener("click", () => {
-    setActivityViewMode("range");
+  presetWeekendButton.addEventListener("click", () => {
+    applyPresetWeekend();
+  });
+  presetWholeTripButton.addEventListener("click", () => {
+    applyPresetWholeTrip();
   });
 
   notificationFilter.addEventListener("change", () => {
@@ -196,7 +189,6 @@ function setupHandlers() {
     saveState();
     activityModal.classList.add("hidden");
     activityForm.reset();
-    selectedDayInput.value = activity.day;
     selectedDay = activity.day;
     rangeStartInput.value = activity.day;
     rangeEndInput.value = activity.day;
@@ -207,8 +199,7 @@ function setupHandlers() {
   clearDataButton.addEventListener("click", () => {
     if (!window.confirm("Reset activities, notifications, and map layers for all trips?")) return;
     state = defaultState();
-    selectedDayInput.value = todayIso();
-    selectedDay = selectedDayInput.value;
+    selectedDay = todayIso();
     rangeStartInput.value = selectedDay;
     rangeEndInput.value = selectedDay;
     wmsLayerMap.forEach((entry) => map.removeLayer(entry.layer));
@@ -223,37 +214,8 @@ function renderAll() {
   renderNotifications();
   renderMapPins();
   renderActiveLayersPanel();
-  renderActivityView();
-  updateWeatherForecast();
-}
-
-function renderActivityView() {
-  const isRange = activityViewMode === "range";
-  const dayCount = getDayActivities().length;
-  const rangeCount = getRangeActivities().length;
-  activityViewDayButton.textContent = `Day (${dayCount})`;
-  activityViewRangeButton.textContent = `Range (${rangeCount})`;
-  activityViewDayButton.classList.toggle("active", !isRange);
-  activityViewRangeButton.classList.toggle("active", isRange);
-  rangeControls.classList.toggle("hidden", !isRange);
-  dailyActivityList.classList.toggle("hidden", isRange);
-  rangeActivityList.classList.toggle("hidden", !isRange);
-  if (isRange) {
-    renderRangeActivities();
-    return;
-  }
   renderDailyActivities();
-}
-
-function setActivityViewMode(mode) {
-  activityViewMode = mode === "range" ? "range" : "day";
-  renderActivityView();
-}
-
-function getDayActivities() {
-  return state.activities
-    .filter((activity) => activity.tripId === state.currentTripId)
-    .filter((activity) => !selectedDay || activity.day === selectedDay);
+  updateWeatherForecast();
 }
 
 function getRangeActivities() {
@@ -297,12 +259,13 @@ function renderTagMemberCheckboxes() {
 
 function renderDailyActivities() {
   dailyActivityList.innerHTML = "";
-  const filtered = getDayActivities().sort(compareActivitiesByDayThenTime);
+  const filtered = getRangeActivities().sort(compareActivitiesByDayThenTime);
+  activitiesTitle.textContent = `Activities (${filtered.length})`;
 
   if (!filtered.length) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "No activities for selected day.";
+    empty.textContent = "No activities in selected date range.";
     dailyActivityList.appendChild(empty);
     return;
   }
@@ -356,34 +319,6 @@ function renderDailyActivities() {
   });
 }
 
-function renderRangeActivities() {
-  rangeActivityList.innerHTML = "";
-  const filtered = getRangeActivities().sort(compareActivitiesByDayThenTime);
-
-  if (!filtered.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty";
-    empty.textContent = "No scheduled activities in selected range.";
-    rangeActivityList.appendChild(empty);
-    return;
-  }
-
-  filtered.forEach((activity) => {
-    const card = document.createElement("article");
-    card.className = "layer-item";
-    card.dataset.activityId = activity.id;
-    const heading = document.createElement("p");
-    heading.innerHTML = `<strong>${activity.category} ${escapeHtml(activity.title)}</strong>`;
-    const meta = document.createElement("p");
-    meta.className = "meta";
-    meta.textContent = `${formatDayDisplay(activity.day)} at ${activity.time}${
-      activity.location ? ` • ${activity.location}` : ""
-    }`;
-    card.append(heading, meta);
-    rangeActivityList.appendChild(card);
-  });
-}
-
 function renderNotifications() {
   notificationList.innerHTML = "";
   const unhandled = getUnhandledNotificationsForCurrentTrip().filter((notification) => {
@@ -414,14 +349,12 @@ function renderNotifications() {
       jumpButton.addEventListener("click", () => {
         if (!activity) return;
         selectedDay = activity.day;
-        selectedDayInput.value = activity.day;
         rangeStartInput.value = activity.day;
         rangeEndInput.value = activity.day;
         if (activity.pinHidden && Number.isFinite(activity.lat) && Number.isFinite(activity.lng)) {
           activity.pinHidden = false;
           saveState();
         }
-        setActivityViewMode("day");
         renderAll();
         focusActivityCard(activity.id);
         openActivityPopup(activity);
@@ -441,7 +374,7 @@ function renderNotifications() {
 
 function focusActivityCard(activityId) {
   const selector = `[data-activity-id="${activityId}"]`;
-  const card = dailyActivityList.querySelector(selector) || rangeActivityList.querySelector(selector);
+  const card = dailyActivityList.querySelector(selector);
   if (!card) return;
   card.classList.add("activity-row-highlight");
   card.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -798,10 +731,6 @@ function openDayPicker() {
   if (typeof fields.day.showPicker === "function") fields.day.showPicker();
 }
 
-function openSelectedDayPicker() {
-  if (typeof selectedDayInput.showPicker === "function") selectedDayInput.showPicker();
-}
-
 function compareActivitiesByDayThenTime(a, b) {
   const dayCompare = normalizeDayForSort(a.day).localeCompare(normalizeDayForSort(b.day));
   if (dayCompare !== 0) return dayCompare;
@@ -832,6 +761,49 @@ function formatDayDisplay(dayText) {
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function applyPresetToday() {
+  const today = todayIso();
+  rangeStartInput.value = today;
+  rangeEndInput.value = today;
+  selectedDay = today;
+  updateWeatherForecast();
+  renderDailyActivities();
+}
+
+function applyPresetWeekend() {
+  const now = new Date();
+  const start = new Date(now);
+  const day = start.getDay();
+  const toSaturday = (6 - day + 7) % 7;
+  start.setDate(start.getDate() + toSaturday);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 1);
+  const startIso = start.toISOString().slice(0, 10);
+  const endIso = end.toISOString().slice(0, 10);
+  rangeStartInput.value = startIso;
+  rangeEndInput.value = endIso;
+  selectedDay = startIso;
+  updateWeatherForecast();
+  renderDailyActivities();
+}
+
+function applyPresetWholeTrip() {
+  const tripActivities = state.activities
+    .filter((activity) => activity.tripId === state.currentTripId)
+    .sort(compareActivitiesByDayThenTime);
+  if (!tripActivities.length) {
+    applyPresetToday();
+    return;
+  }
+  const firstDay = normalizeDayForSort(tripActivities[0].day);
+  const lastDay = normalizeDayForSort(tripActivities[tripActivities.length - 1].day);
+  rangeStartInput.value = firstDay;
+  rangeEndInput.value = lastDay;
+  selectedDay = firstDay;
+  updateWeatherForecast();
+  renderDailyActivities();
 }
 
 function escapeHtml(text) {
