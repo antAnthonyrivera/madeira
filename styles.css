@@ -57,15 +57,19 @@ h2 {
   padding: 1rem;
   display: grid;
   grid-template-columns: 0.82fr 1.45fr;
+  grid-template-rows: 1fr;
   gap: 1rem;
+  align-items: start;
 }
 
 .side-panel {
   grid-column: 1;
+  grid-row: 1;
 }
 
 .map-panel {
   grid-column: 2;
+  grid-row: 1;
 }
 
 .map-wrap {
@@ -321,7 +325,7 @@ button.small {
 }
 
 .side-panel {
-  max-height: min(84vh, 920px);
+  height: min(84vh, 920px);
   overflow: auto;
   display: grid;
   gap: 0.85rem;
