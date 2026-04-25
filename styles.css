@@ -129,11 +129,13 @@ body {
 }
 
 #range-dropdown {
-  width: min(360px, 92vw);
+  width: min(640px, 95vw);
+  padding: 1rem;
 }
 
 #notification-panel {
-  width: min(420px, 92vw);
+  width: min(640px, 95vw);
+  padding: 1rem;
 }
 
 #selected-trip-brand {
@@ -660,12 +662,80 @@ button.small {
 }
 
 .dropdown-panel h3 {
-  font-size: 0.92rem;
-  margin-bottom: 0.35rem;
+  font-size: 2.1rem;
+  font-weight: 800;
+  margin-bottom: 0.55rem;
 }
 
 .dropdown-panel .small-select {
-  min-width: 128px;
+  min-width: 170px;
+  border-radius: 12px;
+  border: 2px solid #bfdbfe;
+  background: #eef6ff;
+  font-weight: 600;
+}
+
+#range-dropdown .row {
+  gap: 0.65rem;
+}
+
+#range-dropdown input[type="date"] {
+  border: 2px solid #bfdbfe;
+  border-radius: 14px;
+  background: #eef6ff;
+  font-weight: 700;
+  color: #1e3a8a;
+  padding: 0.75rem 0.8rem;
+}
+
+#range-dropdown .meta {
+  font-weight: 700;
+  color: #64748b;
+}
+
+#range-dropdown .preset-btn {
+  border: 2px solid #bfdbfe;
+  border-radius: 14px;
+  background: #eaf2fb;
+  color: #0f172a;
+  font-weight: 700;
+  padding: 0.72rem 0.95rem;
+}
+
+#notification-panel .row.between {
+  margin-bottom: 0.65rem;
+}
+
+#notification-list {
+  max-height: min(52vh, 480px);
+  border: 2px solid #bfdbfe;
+  border-radius: 16px;
+  background: #f8fbff;
+  padding: 0.75rem;
+}
+
+#notification-panel .notification-card {
+  border: 2px solid #bfdbfe;
+  border-radius: 14px;
+  background: #eef6ff;
+  padding: 0.75rem;
+}
+
+#notification-panel .notification-card p {
+  font-size: 1rem;
+  margin-bottom: 0.55rem;
+}
+
+#notification-panel .notif-link,
+#notification-panel .notification-card button.small {
+  border-radius: 12px;
+  font-weight: 700;
+  padding: 0.42rem 0.8rem;
+}
+
+#notification-panel .notif-link {
+  background: #f8fbff;
+  border: 2px solid #bfdbfe;
 }
 
 @media (max-width: 1100px) {
