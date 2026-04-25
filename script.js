@@ -20,6 +20,7 @@ let realtimeChannel = null;
 let syncInFlight = false;
 let syncQueued = false;
 let geminiApiKey = "";
+let supportsLayersCollapsedColumn = true;
 
 const selectedTripBrand = document.querySelector("#selected-trip-brand");
 const syncStatusPill = document.querySelector("#sync-status");
@@ -1029,7 +1030,14 @@ async function bootstrapRemoteState() {
     await supabaseClient.from("trips").insert([{ id: DEFAULT_TRIP.id, name: DEFAULT_TRIP.name }]);
   }
   const memberRows = DEFAULT_MEMBERS.map((name) => ({ name, layers_collapsed: false }));
-  await supabaseClient.from("members").upsert(memberRows, { onConflict: "name" });
+  const membersUpsert = await supabaseClient.from("members").upsert(memberRows, { onConflict: "name" });
+  if (membersUpsert.error && isMissingLayersCollapsedError(membersUpsert.error)) {
+    supportsLayersCollapsedColumn = false;
+    await supabaseClient.from("members").upsert(
+      DEFAULT_MEMBERS.map((name) => ({ name })),
+      { onConflict: "name" }
+    );
+  }
 }
 
 async function refreshStateFromRemote() {
@@ -1100,11 +1108,22 @@ async function refreshStateFromRemote() {
 
 async function syncStateToRemote() {
   if (!supabaseClient) return;
-  const memberRows = state.members.map((name) => ({
-    name,
-    layers_collapsed: Boolean(state.userPreferencesByName?.[name]?.layersCollapsed),
-  }));
-  const membersWrite = await supabaseClient.from("members").upsert(memberRows, { onConflict: "name" });
+  const memberRows = state.members.map((name) =>
+    supportsLayersCollapsedColumn
+      ? {
+          name,
+          layers_collapsed: Boolean(state.userPreferencesByName?.[name]?.layersCollapsed),
+        }
+      : { name }
+  );
+  let membersWrite = await supabaseClient.from("members").upsert(memberRows, { onConflict: "name" });
+  if (membersWrite.error && isMissingLayersCollapsedError(membersWrite.error)) {
+    supportsLayersCollapsedColumn = false;
+    membersWrite = await supabaseClient.from("members").upsert(
+      state.members.map((name) => ({ name })),
+      { onConflict: "name" }
+    );
+  }
   throwIfSupabaseError(membersWrite.error, "saving members");
 
   const tripRows = state.trips.map((trip) => ({ id: trip.id, name: trip.name }));
@@ -1176,6 +1195,11 @@ async function syncStateToRemote() {
 function throwIfSupabaseError(error, context) {
   if (!error) return;
   throw new Error(`Supabase error while ${context}: ${error.message || "Unknown error"}`);
+}
+
+function isMissingLayersCollapsedError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return message.includes("layers_collapsed") && message.includes("could not find");
 }
 
 function setSyncStatus(status) {
