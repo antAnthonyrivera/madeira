@@ -23,6 +23,7 @@ let geminiApiKey = "";
 let supportsLayersCollapsedColumn = true;
 
 const selectedTripBrand = document.querySelector("#selected-trip-brand");
+const appHeader = document.querySelector(".app-header");
 const syncStatusPill = document.querySelector("#sync-status");
 const tripList = document.querySelector("#trip-list");
 const tripMemberList = document.querySelector("#trip-member-list");
@@ -106,6 +107,7 @@ void init();
 async function init() {
   setupMap();
   setupHandlers();
+  updateHeaderOffsetVar();
   if (DEFAULT_WMS_URL) {
     wmsUrlInput.value = DEFAULT_WMS_URL;
   }
@@ -198,6 +200,11 @@ function setupHandlers() {
     if (event.target.closest(".dropdown-wrap")) return;
     closeAllDropdowns();
   });
+  window.addEventListener("resize", updateHeaderOffsetVar);
+  window.addEventListener("orientationchange", updateHeaderOffsetVar);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", updateHeaderOffsetVar);
+  }
 
   addTripButton.addEventListener("click", () => {
     const name = window.prompt("Trip name");
@@ -1217,6 +1224,13 @@ function setSyncStatus(status) {
   }
   syncStatusPill.textContent = "Saved";
   syncStatusPill.classList.add("sync-status-saved");
+}
+
+function updateHeaderOffsetVar() {
+  if (!appHeader) return;
+  const rect = appHeader.getBoundingClientRect();
+  const height = Math.max(48, Math.ceil(rect.height));
+  document.documentElement.style.setProperty("--header-offset", `${height}px`);
 }
 
 function setupRealtimeSubscriptions() {

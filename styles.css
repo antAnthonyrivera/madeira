@@ -9,6 +9,7 @@
   --danger: #b42318;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
   --shadow: 0 16px 36px rgba(15, 23, 42, 0.18);
+  --header-offset: 58px;
 }
 
 * {
@@ -960,7 +961,7 @@ button.small {
 
   .dropdown-panel {
     position: fixed;
-    top: 56px;
+    top: calc(var(--header-offset) + env(safe-area-inset-top, 0px));
     right: 8px;
     left: 8px;
     width: auto !important;
@@ -1045,6 +1046,43 @@ button.small {
   #trip-intelligence-modal .modal-card {
     width: min(96vw, 620px);
     max-height: 86vh;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .dropdown-panel {
+    position: fixed;
+    top: calc(var(--header-offset) + env(safe-area-inset-top, 0px));
+    left: 8px;
+    right: 8px;
+    width: auto !important;
+    max-height: min(68vh, 560px);
+    overflow: auto;
+    z-index: 2500;
+  }
+}
+
+@media (max-width: 1024px) and (orientation: landscape) {
+  .map-only-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    gap: 0.55rem;
+  }
+
+  .map-panel {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .side-panel {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 34vh;
+  }
+
+  .map-wrap {
+    height: min(44vh, 420px);
+    min-height: 240px;
   }
 }
 
