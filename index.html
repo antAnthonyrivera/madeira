@@ -15,57 +15,71 @@
   </head>
   <body>
     <header class="app-header">
-      <div class="header-left stack">
-        <div class="row">
-          <h1>Trip Planner</h1>
-          <label for="trip-selector"><strong>Trip:</strong></label>
-          <select id="trip-selector"></select>
-          <button id="add-trip-btn" type="button" class="small">New Trip</button>
-        </div>
-        <div id="range-controls" class="stack">
-          <label for="range-start">Activity range</label>
-          <div class="row preset-row">
-            <button id="preset-today" type="button" class="small preset-btn">Today</button>
-            <button id="preset-weekend" type="button" class="small preset-btn">This weekend</button>
-            <button id="preset-whole-trip" type="button" class="small preset-btn">Whole trip</button>
-          </div>
-          <div class="row">
-            <input id="range-start" type="date" />
-            <span class="meta">to</span>
-            <input id="range-end" type="date" />
-          </div>
-        </div>
+      <div class="header-left">
+        <h1 id="selected-trip-brand">Madeira</h1>
       </div>
-      <div class="header-right stack">
-        <div id="weather-forecast" class="weather-box header-weather">
-          <p class="meta">Weather forecast loading...</p>
-        </div>
-        <div class="header-notification-wrap">
-          <button id="notification-bell" type="button" class="bell-btn" aria-label="Notifications">
-            <svg
-              class="bell-icon"
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path
-                d="M12 22a2.75 2.75 0 0 0 2.58-1.8H9.42A2.75 2.75 0 0 0 12 22Zm7-4.3h-1.1v-6.05a5.9 5.9 0 0 0-4.7-5.78V5.2a1.2 1.2 0 1 0-2.4 0v.67a5.9 5.9 0 0 0-4.7 5.78v6.05H5a1 1 0 0 0 0 2h14a1 1 0 1 0 0-2Z"
-              />
-            </svg>
-            <span id="notification-dot" class="notif-dot hidden">0</span>
-          </button>
-          <div id="notification-panel" class="notification-panel hidden">
-            <div class="row between tight-bottom">
-              <h3>Notifications</h3>
-              <select id="notification-filter" class="small-select">
-                <option value="all">All</option>
-                <option value="mine">Assigned to me</option>
-              </select>
+      <div class="header-right">
+        <div class="header-icons">
+          <div class="dropdown-wrap">
+            <button id="trip-dropdown-toggle" type="button" class="icon-circle-btn" aria-label="Trip switcher">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 2a9 9 0 1 0 9 9 9 9 0 0 0-9-9Zm6.9 8h-2.5a13 13 0 0 0-1.2-4 7 7 0 0 1 3.7 4Zm-6.9-6a10.7 10.7 0 0 1 2.4 6H9.6A10.7 10.7 0 0 1 12 4ZM8.8 6a13 13 0 0 0-1.2 4H5.1A7 7 0 0 1 8.8 6ZM5.1 14h2.5a13 13 0 0 0 1.2 4 7 7 0 0 1-3.7-4Zm6.9 6a10.7 10.7 0 0 1-2.4-6h4.8A10.7 10.7 0 0 1 12 20Zm3.2-2a13 13 0 0 0 1.2-4h2.5a7 7 0 0 1-3.7 4Z"/></svg>
+            </button>
+            <div id="trip-dropdown" class="dropdown-panel hidden">
+              <div class="row between">
+                <h3>Trips</h3>
+                <button id="add-trip-btn" type="button" class="small">+ New Trip</button>
+              </div>
+              <div id="trip-list" class="stack"></div>
             </div>
-            <div id="notification-list" class="stack section-list">
-              <p class="empty">No notifications.</p>
+          </div>
+
+          <div class="dropdown-wrap">
+            <button id="weather-dropdown-toggle" type="button" class="icon-circle-btn" aria-label="Weather details">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 14a4 4 0 0 1 .5-8 5.5 5.5 0 0 1 10.2 2A3.5 3.5 0 1 1 18 15H6a.5.5 0 0 1 0-1Zm6-11a.9.9 0 0 0 .9-.9V1a.9.9 0 0 0-1.8 0v1.1A.9.9 0 0 0 12 3Z"/></svg>
+            </button>
+            <div id="weather-dropdown" class="dropdown-panel hidden">
+              <h3>Weather Details</h3>
+              <div id="weather-forecast" class="weather-box">
+                <p class="meta">Weather forecast loading...</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="dropdown-wrap">
+            <button id="range-dropdown-toggle" type="button" class="icon-circle-btn" aria-label="Activity range">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1.5A2.5 2.5 0 0 1 22 6.5v12A2.5 2.5 0 0 1 19.5 21h-15A2.5 2.5 0 0 1 2 18.5v-12A2.5 2.5 0 0 1 4.5 4H6V3a1 1 0 0 1 1-1Zm13 8H4v8.5a.5.5 0 0 0 .5.5h15a.5.5 0 0 0 .5-.5Z"/></svg>
+            </button>
+            <div id="range-dropdown" class="dropdown-panel hidden">
+              <h3>Activity Range</h3>
+              <div class="row preset-row">
+                <button id="preset-today" type="button" class="small preset-btn">Today</button>
+                <button id="preset-weekend" type="button" class="small preset-btn">Weekend</button>
+                <button id="preset-whole-trip" type="button" class="small preset-btn">Full Trip</button>
+              </div>
+              <div class="row">
+                <input id="range-start" type="date" />
+                <span class="meta">to</span>
+                <input id="range-end" type="date" />
+              </div>
+            </div>
+          </div>
+
+          <div class="dropdown-wrap">
+            <button id="notification-bell" type="button" class="icon-circle-btn" aria-label="Notifications">
+              <svg class="bell-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 22a2.75 2.75 0 0 0 2.58-1.8H9.42A2.75 2.75 0 0 0 12 22Zm7-4.3h-1.1v-6.05a5.9 5.9 0 0 0-4.7-5.78V5.2a1.2 1.2 0 1 0-2.4 0v.67a5.9 5.9 0 0 0-4.7 5.78v6.05H5a1 1 0 0 0 0 2h14a1 1 0 1 0 0-2Z"/></svg>
+              <span id="notification-dot" class="notif-dot hidden">0</span>
+            </button>
+            <div id="notification-panel" class="dropdown-panel hidden">
+              <div class="row between tight-bottom">
+                <h3>Notifications</h3>
+                <select id="notification-filter" class="small-select">
+                  <option value="all">All</option>
+                  <option value="mine">Assigned to me</option>
+                </select>
+              </div>
+              <div id="notification-list" class="stack section-list">
+                <p class="empty">No notifications.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -82,13 +96,9 @@
 
       <section class="panel side-panel">
         <div class="row actions-row">
-          <button id="open-activity-modal" type="button" class="small">Add Activity</button>
-          <button id="open-wms-modal" type="button" class="small">Add Layer</button>
-        </div>
-
-        <div class="section-divider"></div>
-        <div class="row between tight-bottom">
           <h3 id="activities-title">Activities (0)</h3>
+          <button id="open-activity-modal" type="button" class="small">+ Add</button>
+          <button id="open-wms-modal" type="button" class="small">Add Layer</button>
           <button id="clear-data" class="danger small">Reset</button>
         </div>
 
@@ -131,7 +141,7 @@
     <div id="activity-modal" class="modal-overlay hidden">
       <div class="modal-card">
         <div class="row between tight-bottom">
-          <h2>Add Activity</h2>
+            <h2 id="activity-modal-title">Add Activity</h2>
           <button id="close-activity-modal" type="button" class="danger small">Close</button>
         </div>
         <form id="activity-form" class="stack">
@@ -177,7 +187,7 @@
 
           <span id="activity-loc-status" class="status-text"></span>
 
-          <button type="submit">Save Activity</button>
+            <button id="save-activity-btn" type="submit">Save Activity</button>
         </form>
       </div>
     </div>

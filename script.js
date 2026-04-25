@@ -13,7 +13,8 @@ let pendingPinActivityId = null;
 
 let state = loadState();
 
-const tripSelector = document.querySelector("#trip-selector");
+const selectedTripBrand = document.querySelector("#selected-trip-brand");
+const tripList = document.querySelector("#trip-list");
 const addTripButton = document.querySelector("#add-trip-btn");
 const notificationList = document.querySelector("#notification-list");
 const rangeStartInput = document.querySelector("#range-start");
@@ -26,6 +27,12 @@ const notificationFilter = document.querySelector("#notification-filter");
 const notificationBell = document.querySelector("#notification-bell");
 const notificationDot = document.querySelector("#notification-dot");
 const notificationPanel = document.querySelector("#notification-panel");
+const tripDropdownToggle = document.querySelector("#trip-dropdown-toggle");
+const tripDropdown = document.querySelector("#trip-dropdown");
+const weatherDropdownToggle = document.querySelector("#weather-dropdown-toggle");
+const weatherDropdown = document.querySelector("#weather-dropdown");
+const rangeDropdownToggle = document.querySelector("#range-dropdown-toggle");
+const rangeDropdown = document.querySelector("#range-dropdown");
 const clearDataButton = document.querySelector("#clear-data");
 const activeLayerList = document.querySelector("#active-layer-list");
 const presetTodayButton = document.querySelector("#preset-today");
@@ -45,11 +52,14 @@ const wmsLayerOptions = document.querySelector("#wms-layer-options");
 
 const openActivityModalButton = document.querySelector("#open-activity-modal");
 const activityModal = document.querySelector("#activity-modal");
+const activityModalTitle = document.querySelector("#activity-modal-title");
 const closeActivityModalButton = document.querySelector("#close-activity-modal");
 const activityForm = document.querySelector("#activity-form");
+const saveActivityButton = document.querySelector("#save-activity-btn");
 const activityTagsHost = document.querySelector("#activity-tags");
 const geocodeAddressButton = document.querySelector("#geocode-address");
 const activityLocStatus = document.querySelector("#activity-loc-status");
+let editingActivityId = null;
 
 const fields = {
   title: document.querySelector("#activity-title"),
@@ -124,19 +134,25 @@ function setupHandlers() {
   notificationFilter.addEventListener("change", () => {
     renderNotifications();
   });
-  notificationBell.addEventListener("click", () => {
-    notificationPanel.classList.toggle("hidden");
+  notificationBell.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleDropdown("notifications");
+  });
+  tripDropdownToggle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleDropdown("trips");
+  });
+  weatherDropdownToggle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleDropdown("weather");
+  });
+  rangeDropdownToggle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleDropdown("range");
   });
   document.addEventListener("click", (event) => {
-    if (notificationPanel.classList.contains("hidden")) return;
-    if (notificationPanel.contains(event.target) || notificationBell.contains(event.target)) return;
-    notificationPanel.classList.add("hidden");
-  });
-
-  tripSelector.addEventListener("change", () => {
-    state.currentTripId = tripSelector.value;
-    saveState();
-    renderAll();
+    if (event.target.closest(".dropdown-wrap")) return;
+    closeAllDropdowns();
   });
 
   addTripButton.addEventListener("click", () => {
@@ -146,6 +162,7 @@ function setupHandlers() {
     state.trips.push(trip);
     state.currentTripId = trip.id;
     saveState();
+    closeAllDropdowns();
     renderAll();
   });
 
@@ -162,14 +179,25 @@ function setupHandlers() {
   addSelectedLayersButton.addEventListener("click", addSelectedWmsLayers);
 
   openActivityModalButton.addEventListener("click", () => {
+    editingActivityId = null;
     renderTagMemberCheckboxes();
     fields.day.value = selectedDay || todayIso();
     fields.time.value = "";
+    fields.title.value = "";
+    fields.notes.value = "";
+    fields.location.value = "";
+    fields.address.value = "";
+    fields.lat.value = "";
+    fields.lng.value = "";
+    fields.category.value = "🏔️";
     setActivityLocStatus("", "");
+    activityModalTitle.textContent = "Add Activity";
+    saveActivityButton.textContent = "Create Activity";
     activityModal.classList.remove("hidden");
   });
   closeActivityModalButton.addEventListener("click", () => {
     activityModal.classList.add("hidden");
+    editingActivityId = null;
   });
 
   fields.day.addEventListener("click", openDayPicker);
@@ -178,9 +206,10 @@ function setupHandlers() {
   geocodeAddressButton.addEventListener("click", geocodeAddress);
   activityForm.addEventListener("submit", (event) => {
     event.preventDefault();
+    const existing = editingActivityId ? state.activities.find((item) => item.id === editingActivityId) : null;
     const activity = {
-      id: crypto.randomUUID(),
-      tripId: state.currentTripId,
+      id: existing?.id || crypto.randomUUID(),
+      tripId: existing?.tripId || state.currentTripId,
       title: fields.title.value.trim(),
       day: fields.day.value.trim(),
       time: fields.time.value.trim(),
@@ -191,15 +220,23 @@ function setupHandlers() {
       lat: Number.isFinite(Number(fields.lat.value)) ? Number(fields.lat.value) : null,
       lng: Number.isFinite(Number(fields.lng.value)) ? Number(fields.lng.value) : null,
       taggedMembers: selectedTaggedMembers(),
-      pinHidden: false,
-      createdAt: new Date().toISOString(),
+      pinHidden: existing ? Boolean(existing.pinHidden) : false,
+      createdAt: existing?.createdAt || new Date().toISOString(),
     };
     if (!activity.title || !activity.day || !activity.time) return;
-    state.activities.push(activity);
-    createTagNotifications(activity);
+    if (existing) {
+      const previousTags = new Set(existing.taggedMembers || []);
+      Object.assign(existing, activity);
+      createTagNotifications(existing, previousTags);
+    } else {
+      state.activities.push(activity);
+      createTagNotifications(activity);
+    }
     saveState();
     activityModal.classList.add("hidden");
     activityForm.reset();
+    editingActivityId = null;
+    saveActivityButton.textContent = "Create Activity";
     selectedDay = activity.day;
     rangeStartInput.value = activity.day;
     rangeEndInput.value = activity.day;
@@ -221,12 +258,34 @@ function setupHandlers() {
 }
 
 function renderAll() {
-  renderTripSelector();
+  renderTripHeader();
+  renderTripList();
   renderNotifications();
   renderMapPins();
   renderActiveLayersPanel();
   renderDailyActivities();
   updateWeatherForecast();
+}
+
+function closeAllDropdowns() {
+  tripDropdown.classList.add("hidden");
+  weatherDropdown.classList.add("hidden");
+  rangeDropdown.classList.add("hidden");
+  notificationPanel.classList.add("hidden");
+}
+
+function toggleDropdown(kind) {
+  const targets = {
+    trips: tripDropdown,
+    weather: weatherDropdown,
+    range: rangeDropdown,
+    notifications: notificationPanel,
+  };
+  const target = targets[kind];
+  if (!target) return;
+  const wasHidden = target.classList.contains("hidden");
+  closeAllDropdowns();
+  if (wasHidden) target.classList.remove("hidden");
 }
 
 function getRangeActivities() {
@@ -242,14 +301,33 @@ function getRangeActivities() {
     });
 }
 
-function renderTripSelector() {
-  tripSelector.innerHTML = "";
+function renderTripHeader() {
+  const activeTrip = state.trips.find((trip) => trip.id === state.currentTripId) || state.trips[0] || DEFAULT_TRIP;
+  selectedTripBrand.textContent = activeTrip.name;
+}
+
+function renderTripList() {
+  tripList.innerHTML = "";
   state.trips.forEach((trip) => {
-    const option = document.createElement("option");
-    option.value = trip.id;
-    option.textContent = trip.name;
-    if (trip.id === state.currentTripId) option.selected = true;
-    tripSelector.appendChild(option);
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = `trip-row${trip.id === state.currentTripId ? " active" : ""}`;
+    const label = document.createElement("span");
+    label.textContent = trip.name;
+    row.appendChild(label);
+    if (trip.id === state.currentTripId) {
+      const pill = document.createElement("span");
+      pill.className = "active-pill";
+      pill.textContent = "Active";
+      row.appendChild(pill);
+    }
+    row.addEventListener("click", () => {
+      state.currentTripId = trip.id;
+      saveState();
+      closeAllDropdowns();
+      renderAll();
+    });
+    tripList.appendChild(row);
   });
 }
 
@@ -266,6 +344,30 @@ function renderTagMemberCheckboxes() {
     label.append(member);
     activityTagsHost.appendChild(label);
   });
+}
+
+function openActivityModalForEdit(activityId) {
+  const activity = state.activities.find((item) => item.id === activityId);
+  if (!activity) return;
+  editingActivityId = activity.id;
+  renderTagMemberCheckboxes();
+  fields.title.value = activity.title || "";
+  fields.day.value = normalizeDayForSort(activity.day) || todayIso();
+  fields.time.value = activity.time || "";
+  fields.category.value = activity.category || "🏔️";
+  fields.notes.value = activity.notes || "";
+  fields.location.value = activity.location || "";
+  fields.address.value = activity.address || "";
+  fields.lat.value = Number.isFinite(activity.lat) ? String(activity.lat) : "";
+  fields.lng.value = Number.isFinite(activity.lng) ? String(activity.lng) : "";
+  const selected = new Set(activity.taggedMembers || []);
+  activityTagsHost.querySelectorAll("input[type='checkbox']").forEach((input) => {
+    input.checked = selected.has(input.value);
+  });
+  saveActivityButton.textContent = "Update Activity";
+  activityModalTitle.textContent = "Edit Activity";
+  setActivityLocStatus("", "");
+  activityModal.classList.remove("hidden");
 }
 
 function renderDailyActivities() {
@@ -286,9 +388,8 @@ function renderDailyActivities() {
     card.className = "layer-item";
     card.dataset.activityId = activity.id;
     const activityWeather = getActivityWeatherSnapshot(activity);
-    const weatherClass = weatherClassForCode(activityWeather?.weatherCode ?? selectedDayWeather?.weatherCode);
-    const weatherStrip = document.createElement("div");
-    weatherStrip.className = `weather-strip ${weatherClass}`;
+    const accentStrip = document.createElement("div");
+    accentStrip.className = `category-strip ${categoryAccentClass(activity.category)}`;
     const heading = document.createElement("p");
     heading.innerHTML = `<strong>${activity.category} ${escapeHtml(activity.title)}</strong>`;
     const meta = document.createElement("p");
@@ -308,24 +409,28 @@ function renderDailyActivities() {
     confidence.textContent = `Weather confidence: ${weatherConfidenceLabel(activityWeather)}`;
     const actions = document.createElement("div");
     actions.className = "activity-row-actions";
-    const pinToggle = document.createElement("button");
-    pinToggle.type = "button";
-    pinToggle.className = "icon-btn";
-    pinToggle.textContent = activity.pinHidden ? "Show Pin" : "Hide Pin";
-    pinToggle.addEventListener("click", () => {
-      activity.pinHidden = !activity.pinHidden;
-      saveState();
-      renderAll();
-    });
-    const setPin = document.createElement("button");
-    setPin.type = "button";
-    setPin.className = "icon-btn";
-    setPin.textContent = "Set Pin";
-    setPin.addEventListener("click", () => {
+    const mapPinButton = document.createElement("button");
+    mapPinButton.type = "button";
+    mapPinButton.className = "icon-btn";
+    mapPinButton.textContent = "Map Pin";
+    mapPinButton.addEventListener("click", () => {
       pendingPinActivityId = activity.id;
+      if (Number.isFinite(activity.lat) && Number.isFinite(activity.lng)) {
+        activity.pinHidden = false;
+        saveState();
+        renderAll();
+        openActivityPopup(activity);
+      }
     });
-    actions.append(pinToggle, setPin);
-    card.append(heading, weatherStrip, meta, notes, tags, confidence, actions);
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "icon-btn";
+    editButton.textContent = "Edit";
+    editButton.addEventListener("click", () => {
+      openActivityModalForEdit(activity.id);
+    });
+    actions.append(mapPinButton, editButton);
+    card.append(accentStrip, heading, meta, notes, tags, confidence, actions);
     dailyActivityList.appendChild(card);
   });
 }
@@ -604,19 +709,19 @@ function selectedTaggedMembers() {
   return [...activityTagsHost.querySelectorAll("input[type='checkbox']:checked")].map((input) => input.value);
 }
 
-function createTagNotifications(activity) {
-  activity.taggedMembers
-    .forEach((userName) => {
-      state.notifications.push({
-        id: crypto.randomUUID(),
-        userName,
-        fromUser: "Activity tagged",
-        activityId: activity.id,
-        tripId: activity.tripId,
-        handled: false,
-        createdAt: new Date().toISOString(),
-      });
+function createTagNotifications(activity, previousTags = new Set()) {
+  activity.taggedMembers.forEach((userName) => {
+    if (previousTags.has(userName)) return;
+    state.notifications.push({
+      id: crypto.randomUUID(),
+      userName,
+      fromUser: "Activity tagged",
+      activityId: activity.id,
+      tripId: activity.tripId,
+      handled: false,
+      createdAt: new Date().toISOString(),
     });
+  });
 }
 
 function getUnhandledNotificationsForCurrentTrip() {
@@ -727,11 +832,11 @@ async function updateWeatherForecast() {
     };
     weatherForecast.innerHTML = `
       <strong>${summary}</strong>
-      <p class="meta">Temp: ${roundOrDash(tempMin)} to ${roundOrDash(tempMax)} °C</p>
+      <p class="meta">Temp: ${roundOrDash(cToF(tempMin))} to ${roundOrDash(cToF(tempMax))} °F</p>
       <p class="meta">Rain chance: ${roundOrDash(rainProb)}% • Rain: ${roundOrDash(rainSum)} mm</p>
       <p class="meta">Cloud cover: ${roundOrDash(cloud)}% • Gusts: ${roundOrDash(selectedDayWeather.windGust)} km/h</p>
     `;
-    mapWeatherBadge.textContent = `${summary} • ${roundOrDash(tempMax)}°C`;
+    mapWeatherBadge.textContent = `${summary} • ${roundOrDash(cToF(tempMax))}°F`;
   } catch (error) {
     selectedDayWeather = null;
     weatherForecast.innerHTML = `<p class="meta">Weather unavailable: ${escapeHtml(
@@ -891,6 +996,11 @@ function roundOrDash(value) {
   return Math.round(value * 10) / 10;
 }
 
+function cToF(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return NaN;
+  return (value * 9) / 5 + 32;
+}
+
 function getActivityWeatherSnapshot(activity) {
   if (!selectedDayWeather?.hourly?.time?.length) return selectedDayWeather;
   const targetHour = parseActivityHour(activity.time);
@@ -986,5 +1096,24 @@ function pinColorForCategory(category) {
       return "#22c55e";
     default:
       return "#2563eb";
+  }
+}
+
+function categoryAccentClass(category) {
+  switch (category) {
+    case "🏔️":
+      return "accent-hike";
+    case "🏖️":
+      return "accent-beach";
+    case "🍽️":
+      return "accent-food";
+    case "🚗":
+      return "accent-drive";
+    case "🌅":
+      return "accent-sunset";
+    case "📸":
+      return "accent-photo";
+    default:
+      return "accent-default";
   }
 }
