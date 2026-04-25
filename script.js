@@ -5,6 +5,7 @@ const DEFAULT_WMS_URL = "https://view.eumetsat.int/geoserver/wms";
 
 let map = null;
 let selectedDay = "";
+let selectedDayWeather = null;
 let wmsDiscoveredLayers = [];
 const wmsLayerMap = new Map();
 const markerByActivityId = new Map();
@@ -16,13 +17,12 @@ const tripSelector = document.querySelector("#trip-selector");
 const addTripButton = document.querySelector("#add-trip-btn");
 const notificationList = document.querySelector("#notification-list");
 const selectedDayInput = document.querySelector("#selected-day");
+const weatherForecast = document.querySelector("#weather-forecast");
+const mapWeatherBadge = document.querySelector("#map-weather-badge");
 const dailyActivityList = document.querySelector("#daily-activity-list");
 const notificationFilter = document.querySelector("#notification-filter");
 const clearDataButton = document.querySelector("#clear-data");
 const activeLayerList = document.querySelector("#active-layer-list");
-
-const mapAddMenuToggle = document.querySelector("#map-add-menu-toggle");
-const mapAddMenu = document.querySelector("#map-add-menu");
 
 const openWmsModalButton = document.querySelector("#open-wms-modal");
 const wmsModal = document.querySelector("#wms-modal");
@@ -63,6 +63,7 @@ function init() {
   wmsUrlInput.value = DEFAULT_WMS_URL;
   selectedDayInput.value = todayIso();
   selectedDay = selectedDayInput.value;
+  updateWeatherForecast();
   renderAll();
 }
 
@@ -93,6 +94,7 @@ function setupHandlers() {
   selectedDayInput.addEventListener("focus", openSelectedDayPicker);
   selectedDayInput.addEventListener("change", () => {
     selectedDay = selectedDayInput.value;
+    updateWeatherForecast();
     renderDailyActivities();
   });
 
@@ -116,18 +118,7 @@ function setupHandlers() {
     renderAll();
   });
 
-  mapAddMenuToggle.addEventListener("click", () => {
-    mapAddMenu.classList.toggle("hidden");
-  });
-
-  document.addEventListener("click", (event) => {
-    if (!mapAddMenu.contains(event.target) && event.target !== mapAddMenuToggle) {
-      mapAddMenu.classList.add("hidden");
-    }
-  });
-
   openWmsModalButton.addEventListener("click", () => {
-    mapAddMenu.classList.add("hidden");
     resetWmsModalState();
     wmsModal.classList.remove("hidden");
   });
@@ -140,7 +131,6 @@ function setupHandlers() {
   addSelectedLayersButton.addEventListener("click", addSelectedWmsLayers);
 
   openActivityModalButton.addEventListener("click", () => {
-    mapAddMenu.classList.add("hidden");
     renderTagMemberCheckboxes();
     fields.day.value = selectedDay || todayIso();
     fields.time.value = "";
@@ -203,6 +193,7 @@ function renderAll() {
   renderNotifications();
   renderMapPins();
   renderActiveLayersPanel();
+  updateWeatherForecast();
 }
 
 function renderTripSelector() {
@@ -249,6 +240,10 @@ function renderDailyActivities() {
   filtered.forEach((activity) => {
     const card = document.createElement("article");
     card.className = "layer-item";
+    const activityWeather = getActivityWeatherSnapshot(activity);
+    const weatherClass = weatherClassForCode(activityWeather?.weatherCode ?? selectedDayWeather?.weatherCode);
+    const weatherStrip = document.createElement("div");
+    weatherStrip.className = `weather-strip ${weatherClass}`;
     const heading = document.createElement("p");
     heading.innerHTML = `<strong>${activity.category} ${escapeHtml(activity.title)}</strong>`;
     const meta = document.createElement("p");
@@ -263,6 +258,9 @@ function renderDailyActivities() {
     tags.textContent = activity.taggedMembers.length
       ? `Tagged: ${activity.taggedMembers.join(", ")}`
       : "Tagged: none";
+    const confidence = document.createElement("p");
+    confidence.className = "meta";
+    confidence.textContent = `Weather confidence: ${weatherConfidenceLabel(activityWeather)}`;
     const actions = document.createElement("div");
     actions.className = "activity-row-actions";
     const pinToggle = document.createElement("button");
@@ -282,7 +280,7 @@ function renderDailyActivities() {
       pendingPinActivityId = activity.id;
     });
     actions.append(pinToggle, setPin);
-    card.append(heading, meta, notes, tags, actions);
+    card.append(heading, weatherStrip, meta, notes, tags, confidence, actions);
     dailyActivityList.appendChild(card);
   });
 }
@@ -593,6 +591,73 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+async function updateWeatherForecast() {
+  if (!selectedDay) {
+    selectedDayWeather = null;
+    weatherForecast.innerHTML = `<p class="meta">Pick a date to load weather forecast.</p>`;
+    mapWeatherBadge.textContent = "Weather: --";
+    return;
+  }
+  weatherForecast.innerHTML = `<p class="meta">Loading weather forecast...</p>`;
+  mapWeatherBadge.textContent = "Weather: loading...";
+  try {
+    const params = new URLSearchParams({
+      latitude: "32.6669",
+      longitude: "-16.9241",
+      daily:
+        "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,cloud_cover_mean",
+      hourly: "weather_code,precipitation_probability,cloud_cover,wind_gusts_10m,temperature_2m",
+      timezone: "auto",
+      start_date: selectedDay,
+      end_date: selectedDay,
+    });
+    const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error(`Forecast request failed (${response.status})`);
+    }
+    const payload = await response.json();
+    const daily = payload.daily;
+    if (!daily || !daily.time || !daily.time.length) {
+      throw new Error("No forecast returned for this date.");
+    }
+    const summary = weatherCodeToSummary(daily.weather_code?.[0]);
+    const tempMin = daily.temperature_2m_min?.[0];
+    const tempMax = daily.temperature_2m_max?.[0];
+    const rainProb = daily.precipitation_probability_max?.[0];
+    const rainSum = daily.precipitation_sum?.[0];
+    const cloud = daily.cloud_cover_mean?.[0];
+    const hourly = payload.hourly || {};
+    selectedDayWeather = {
+      weatherCode: Number(daily.weather_code?.[0]),
+      rainProbability: Number(rainProb),
+      cloudCover: Number(cloud),
+      windGust: Number(hourly.wind_gusts_10m?.[0]),
+      hourly: {
+        time: Array.isArray(hourly.time) ? hourly.time : [],
+        weatherCode: Array.isArray(hourly.weather_code) ? hourly.weather_code : [],
+        rainProbability: Array.isArray(hourly.precipitation_probability)
+          ? hourly.precipitation_probability
+          : [],
+        cloudCover: Array.isArray(hourly.cloud_cover) ? hourly.cloud_cover : [],
+        windGust: Array.isArray(hourly.wind_gusts_10m) ? hourly.wind_gusts_10m : [],
+      },
+    };
+    weatherForecast.innerHTML = `
+      <strong>${summary}</strong>
+      <p class="meta">Temp: ${roundOrDash(tempMin)} to ${roundOrDash(tempMax)} °C</p>
+      <p class="meta">Rain chance: ${roundOrDash(rainProb)}% • Rain: ${roundOrDash(rainSum)} mm</p>
+      <p class="meta">Cloud cover: ${roundOrDash(cloud)}% • Gusts: ${roundOrDash(selectedDayWeather.windGust)} km/h</p>
+    `;
+    mapWeatherBadge.textContent = `${summary} • ${roundOrDash(tempMax)}°C`;
+  } catch (error) {
+    selectedDayWeather = null;
+    weatherForecast.innerHTML = `<p class="meta">Weather unavailable: ${escapeHtml(
+      error.message || "Unknown error"
+    )}</p>`;
+    mapWeatherBadge.textContent = "Weather: unavailable";
+  }
+}
+
 function openDayPicker() {
   if (typeof fields.day.showPicker === "function") fields.day.showPicker();
 }
@@ -652,6 +717,135 @@ function scoreLayer(layer) {
   if (text.includes("mask")) score += 2;
   if (text.includes("top")) score += 1;
   return score;
+}
+
+function weatherCodeToSummary(code) {
+  switch (Number(code)) {
+    case 0:
+      return "Clear sky (sunny)";
+    case 1:
+    case 2:
+      return "Partly cloudy";
+    case 3:
+      return "Overcast";
+    case 45:
+    case 48:
+      return "Fog";
+    case 51:
+    case 53:
+    case 55:
+    case 56:
+    case 57:
+      return "Drizzle";
+    case 61:
+    case 63:
+    case 65:
+    case 66:
+    case 67:
+      return "Rain";
+    case 71:
+    case 73:
+    case 75:
+    case 77:
+      return "Snow";
+    case 80:
+    case 81:
+    case 82:
+      return "Rain showers";
+    case 85:
+    case 86:
+      return "Snow showers";
+    case 95:
+    case 96:
+    case 99:
+      return "Thunderstorm";
+    default:
+      return "Mixed/unknown conditions";
+  }
+}
+
+function roundOrDash(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "-";
+  return Math.round(value * 10) / 10;
+}
+
+function getActivityWeatherSnapshot(activity) {
+  if (!selectedDayWeather?.hourly?.time?.length) return selectedDayWeather;
+  const targetHour = parseActivityHour(activity.time);
+  const targetStamp = `${activity.day}T${String(targetHour).padStart(2, "0")}:00`;
+  const times = selectedDayWeather.hourly.time;
+  let index = times.indexOf(targetStamp);
+  if (index === -1) {
+    index = findClosestHourlyIndex(times, targetStamp);
+  }
+  if (index < 0) return selectedDayWeather;
+  return {
+    weatherCode: Number(selectedDayWeather.hourly.weatherCode[index]),
+    rainProbability: Number(selectedDayWeather.hourly.rainProbability[index]),
+    cloudCover: Number(selectedDayWeather.hourly.cloudCover[index]),
+    windGust: Number(selectedDayWeather.hourly.windGust[index]),
+  };
+}
+
+function parseActivityHour(timeText) {
+  const match = String(timeText || "").match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return 12;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  return minute >= 30 ? Math.min(hour + 1, 23) : hour;
+}
+
+function findClosestHourlyIndex(times, targetStamp) {
+  const target = new Date(targetStamp).getTime();
+  if (Number.isNaN(target)) return -1;
+  let bestIndex = -1;
+  let bestDiff = Number.POSITIVE_INFINITY;
+  times.forEach((timeValue, idx) => {
+    const ts = new Date(timeValue).getTime();
+    if (Number.isNaN(ts)) return;
+    const diff = Math.abs(ts - target);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestIndex = idx;
+    }
+  });
+  return bestIndex;
+}
+
+function weatherClassForCode(code) {
+  const numeric = Number(code);
+  if ([0, 1].includes(numeric)) return "weather-clear";
+  if ([2, 3, 45, 48].includes(numeric)) return "weather-cloudy";
+  if (
+    [
+      51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 71, 73, 75, 77, 85, 86,
+    ].includes(numeric)
+  )
+    return "weather-rainy";
+  if ([95, 96, 99].includes(numeric)) return "weather-storm";
+  return "weather-cloudy";
+}
+
+function weatherConfidenceLabel(snapshot) {
+  if (!snapshot) return "Unknown";
+  const rain = snapshot.rainProbability;
+  const cloud = snapshot.cloudCover;
+  const gust = snapshot.windGust;
+  let risk = 0;
+  if (rain >= 70) risk += 3;
+  else if (rain >= 45) risk += 2;
+  else if (rain >= 25) risk += 1;
+
+  if (gust >= 55) risk += 3;
+  else if (gust >= 40) risk += 2;
+  else if (gust >= 30) risk += 1;
+
+  if (cloud >= 90) risk += 2;
+  else if (cloud >= 70) risk += 1;
+
+  if (risk >= 5) return "High";
+  if (risk >= 3) return "Medium";
+  return "Low";
 }
 
 function pinColorForCategory(category) {
