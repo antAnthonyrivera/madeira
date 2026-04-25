@@ -117,10 +117,13 @@
 
     <div id="wms-modal" class="modal-overlay hidden">
       <div class="modal-card">
-        <h2>Add WMS Overlay</h2>
+        <div class="row between tight-bottom">
+          <h2>Add WMS Overlay</h2>
+          <button id="close-wms-modal-top" type="button" class="danger small">Close</button>
+        </div>
         <div class="stack">
           <label for="wms-url-input">WMS URL</label>
-          <input id="wms-url-input" placeholder="https://example.com/geoserver/wms" />
+          <input id="wms-url-input" value="https://view.eumetsat.int/geoserver/wms" />
           <button id="load-wms-layers" type="button">Load Layers</button>
           <p id="wms-error" class="status-text warn hidden"></p>
         </div>
@@ -129,7 +132,7 @@
           <div id="wms-layer-options" class="stack"></div>
           <div class="row">
             <button id="add-selected-layers" type="button">Add Selected</button>
-            <button id="close-wms-modal" type="button" class="danger">Close</button>
+            <button id="close-wms-modal" type="button" class="danger">Done</button>
           </div>
         </div>
       </div>

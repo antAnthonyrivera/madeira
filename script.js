@@ -26,6 +26,7 @@ const activityTagsHost = document.querySelector("#activity-tags");
 const openWmsModalButton = document.querySelector("#open-wms-modal");
 const wmsModal = document.querySelector("#wms-modal");
 const closeWmsModalButton = document.querySelector("#close-wms-modal");
+const closeWmsModalTopButton = document.querySelector("#close-wms-modal-top");
 const loadWmsLayersButton = document.querySelector("#load-wms-layers");
 const addSelectedLayersButton = document.querySelector("#add-selected-layers");
 const wmsUrlInput = document.querySelector("#wms-url-input");
@@ -110,7 +111,13 @@ function setupHandlers() {
     resetWmsModalState();
     wmsModal.classList.remove("hidden");
   });
+  wmsModal.addEventListener("click", (event) => {
+    if (event.target === wmsModal) {
+      wmsModal.classList.add("hidden");
+    }
+  });
   closeWmsModalButton.addEventListener("click", () => wmsModal.classList.add("hidden"));
+  closeWmsModalTopButton.addEventListener("click", () => wmsModal.classList.add("hidden"));
   loadWmsLayersButton.addEventListener("click", loadWmsLayersFromUrl);
   addSelectedLayersButton.addEventListener("click", addSelectedWmsLayers);
 
@@ -336,7 +343,7 @@ function renderWmsLayerOptions() {
   wmsLayerOptions.innerHTML = "";
   wmsDiscoveredLayers.forEach((layer) => {
     const label = document.createElement("label");
-    label.className = "layer-item";
+    label.className = "layer-item wms-option";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.value = layer.name;
