@@ -509,13 +509,27 @@ function renderMapPins() {
     if (activity.tripId !== state.currentTripId) return;
     if (activity.pinHidden) return;
     if (!Number.isFinite(activity.lat) || !Number.isFinite(activity.lng)) return;
-    const marker = L.circleMarker([activity.lat, activity.lng], {
-      radius: 8,
-      color: "#0f172a",
-      weight: 1,
-      fillColor: pinColorForCategory(activity.category),
-      fillOpacity: 0.92,
+    const marker = L.marker([activity.lat, activity.lng], {
+      icon: L.divIcon({
+        className: "activity-pin-icon-wrap",
+        html: `<span class="activity-pin-icon" style="background:${pinColorForCategory(activity.category)}"></span>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8],
+      }),
+      draggable: true,
     }).addTo(map);
+    marker.on("dragend", () => {
+      const position = marker.getLatLng();
+      activity.lat = Number(position.lat.toFixed(5));
+      activity.lng = Number(position.lng.toFixed(5));
+      activity.pinHidden = false;
+      saveState();
+      marker.bindPopup(
+        `<strong>${escapeHtml(activity.title)}</strong><br>${escapeHtml(formatDayDisplay(activity.day))} ${escapeHtml(
+          activity.time
+        )}<br>${escapeHtml(activity.location || activity.address || "No place name")}`
+      );
+    });
     marker.bindPopup(
       `<strong>${escapeHtml(activity.title)}</strong><br>${escapeHtml(formatDayDisplay(activity.day))} ${escapeHtml(
         activity.time
