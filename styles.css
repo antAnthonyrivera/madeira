@@ -644,15 +644,21 @@ button.small {
 }
 
 #add-trip-btn {
-  min-width: 34px;
-  width: 34px;
-  height: 34px;
+  min-width: 28px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   padding: 0;
   display: grid;
   place-items: center;
-  font-size: 1.05rem;
+  font-size: 0.92rem;
   line-height: 1;
+  flex: 0 0 auto;
+}
+
+#trip-dropdown .row.between {
+  align-items: center;
+  margin-bottom: 0.35rem;
 }
 
 .trip-list-stack {
@@ -974,6 +980,13 @@ button.small {
     font-size: 1.25rem;
   }
 
+  #add-trip-btn {
+    min-width: 26px;
+    width: 26px;
+    height: 26px;
+    font-size: 0.86rem;
+  }
+
   .trip-row {
     font-size: 0.95rem;
     padding: 0.48rem 0.6rem;
@@ -1061,6 +1074,13 @@ button.small {
   .trip-feature-btn {
     font-size: 0.9rem;
     padding: 0.55rem 0.62rem;
+  }
+
+  #add-trip-btn {
+    min-width: 24px;
+    width: 24px;
+    height: 24px;
+    font-size: 0.8rem;
   }
 
   #range-dropdown input[type="date"] {

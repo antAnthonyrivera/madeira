@@ -1694,9 +1694,16 @@ function applyMagicImportPayload(payload, mode = "current") {
       }
     });
   }
-  payload.activities.forEach((item) => {
+  const activityInputs = Array.isArray(payload.activities) ? payload.activities : [];
+  const needsYear = activityInputs.some((item) => !hasExplicitYear(item?.day));
+  const importYear = needsYear ? promptForImportYear() : null;
+  if (needsYear && !importYear) {
+    throw new Error("Import cancelled: a valid year is required for dates without explicit year.");
+  }
+
+  activityInputs.forEach((item) => {
     const title = String(item?.title || "").trim();
-    const day = normalizeDayForSort(item?.day || "");
+    const day = normalizeImportDay(item?.day, importYear);
     const time = normalizeTimeText(item?.time || "");
     if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !time) return;
     const tripName = String(item?.tripName || "").trim().toLowerCase();
@@ -1723,6 +1730,40 @@ function applyMagicImportPayload(payload, mode = "current") {
       createdAt: new Date().toISOString(),
     });
   });
+}
+
+function hasExplicitYear(dayValue) {
+  return /\b\d{4}\b/.test(String(dayValue || ""));
+}
+
+function promptForImportYear() {
+  const currentYear = new Date().getFullYear();
+  const entered = window.prompt("Some imported dates are missing a year. Enter the trip year (YYYY):", String(currentYear));
+  if (!entered) return "";
+  const clean = String(entered).trim();
+  if (!/^\d{4}$/.test(clean)) return "";
+  return clean;
+}
+
+function normalizeImportDay(dayValue, fallbackYear = "") {
+  const raw = String(dayValue || "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  if (/^\d{1,2}\/\d{1,2}$/.test(raw) && fallbackYear) {
+    const [month, day] = raw.split("/").map((part) => Number(part));
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${fallbackYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  if (/^\d{1,2}-\d{1,2}$/.test(raw) && fallbackYear) {
+    const [month, day] = raw.split("-").map((part) => Number(part));
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${fallbackYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  const withYear = !hasExplicitYear(raw) && fallbackYear ? `${raw} ${fallbackYear}` : raw;
+  const normalized = normalizeDayForSort(withYear);
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : "";
 }
 
 function normalizeCategoryEmoji(raw) {
