@@ -62,6 +62,9 @@ function setupMap() {
 }
 
 function setupHandlers() {
+  fields.day.addEventListener("click", openDayPicker);
+  fields.day.addEventListener("focus", openDayPicker);
+
   memberForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const name = memberNameInput.value.trim();
@@ -159,13 +162,13 @@ function renderActivities() {
     return;
   }
 
-  const activities = [...appData.activities].sort((a, b) => a.day.localeCompare(b.day));
+  const activities = [...appData.activities].sort(compareActivitiesByDayThenTime);
   activities.forEach((activity) => {
     const node = activityTemplate.content.firstElementChild.cloneNode(true);
     node.dataset.activityId = activity.id;
 
     node.querySelector(".activity-title").textContent = activity.title;
-    node.querySelector(".meta").textContent = `${activity.day} at ${activity.time}${
+    node.querySelector(".meta").textContent = `${formatDayDisplay(activity.day)} at ${activity.time}${
       activity.location ? ` • ${activity.location}` : ""
     }`;
     node.querySelector(".notes").textContent = activity.notes || "No notes yet.";
@@ -234,7 +237,7 @@ function renderMapPins() {
     }
     const marker = L.marker([activity.lat, activity.lng]).addTo(map);
     marker.bindPopup(
-      `<strong>${escapeHtml(activity.title)}</strong><br>${escapeHtml(activity.day)} ${escapeHtml(
+      `<strong>${escapeHtml(activity.title)}</strong><br>${escapeHtml(formatDayDisplay(activity.day))} ${escapeHtml(
         activity.time
       )}<br>${escapeHtml(activity.location || "No place name")}`
     );
@@ -245,6 +248,49 @@ function renderMapPins() {
 function extractMentions(text) {
   const mentionMatches = text.match(/@([A-Za-z0-9 _.-]{1,24})/g) || [];
   return mentionMatches.map((tag) => tag.slice(1).trim());
+}
+
+function openDayPicker() {
+  if (typeof fields.day.showPicker === "function") {
+    fields.day.showPicker();
+  }
+}
+
+function compareActivitiesByDayThenTime(a, b) {
+  const dateA = normalizeDayForSort(a.day);
+  const dateB = normalizeDayForSort(b.day);
+  if (dateA !== dateB) {
+    return dateA.localeCompare(dateB);
+  }
+  return String(a.time || "").localeCompare(String(b.time || ""));
+}
+
+function normalizeDayForSort(dayText) {
+  const raw = String(dayText || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return raw;
+}
+
+function formatDayDisplay(dayText) {
+  const normalized = normalizeDayForSort(dayText);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return String(dayText || "");
+  }
+  const [year, month, day] = normalized.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
 }
 
 function escapeHtml(text) {
