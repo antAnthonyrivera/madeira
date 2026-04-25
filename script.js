@@ -42,6 +42,7 @@ const activityTemplate = document.querySelector("#activity-template");
 const tripModal = document.querySelector("#trip-modal");
 const tripForm = document.querySelector("#trip-form");
 const closeTripModalButton = document.querySelector("#close-trip-modal");
+const setupBanner = document.querySelector("#setup-banner");
 
 const fields = {
   title: document.querySelector("#activity-title"),
@@ -111,40 +112,47 @@ function setupHandlers() {
   });
 
   newTripButton.addEventListener("click", () => {
+    if (!tripModal) {
+      return;
+    }
     tripModal.classList.remove("hidden");
   });
 
-  closeTripModalButton.addEventListener("click", () => {
-    tripModal.classList.add("hidden");
-    tripForm.reset();
-  });
+  if (closeTripModalButton && tripModal && tripForm) {
+    closeTripModalButton.addEventListener("click", () => {
+      tripModal.classList.add("hidden");
+      tripForm.reset();
+    });
+  }
 
-  tripForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!isConnected) {
-      setConnectionStatus("Connect Supabase first.", "warn");
-      return;
-    }
-    const payload = {
-      name: tripFields.name.value.trim(),
-      start_date: tripFields.startDate.value || null,
-      end_date: tripFields.endDate.value || null,
-      base_currency: tripFields.currency.value || "EUR",
-    };
-    if (!payload.name) {
-      return;
-    }
-    const { data, error } = await supabase.from("trips").insert(payload).select("id").single();
-    if (error) {
-      setConnectionStatus(error.message, "warn");
-      return;
-    }
-    currentTripId = data.id;
-    localStorage.setItem(CURRENT_TRIP_KEY, currentTripId);
-    tripModal.classList.add("hidden");
-    tripForm.reset();
-    await refreshAllData();
-  });
+  if (tripForm && tripModal) {
+    tripForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!isConnected) {
+        setConnectionStatus("Connect Supabase first.", "warn");
+        return;
+      }
+      const payload = {
+        name: tripFields.name.value.trim(),
+        start_date: tripFields.startDate.value || null,
+        end_date: tripFields.endDate.value || null,
+        base_currency: tripFields.currency.value || "EUR",
+      };
+      if (!payload.name) {
+        return;
+      }
+      const { data, error } = await supabase.from("trips").insert(payload).select("id").single();
+      if (error) {
+        setConnectionStatus(error.message, "warn");
+        return;
+      }
+      currentTripId = data.id;
+      localStorage.setItem(CURRENT_TRIP_KEY, currentTripId);
+      tripModal.classList.add("hidden");
+      tripForm.reset();
+      await refreshAllData();
+    });
+  }
 
   applyWmsOverlayButton.addEventListener("click", () => {
     const url = wmsUrlInput.value.trim();
@@ -268,10 +276,34 @@ async function connectSupabase(url, anonKey) {
   }
   isConnected = true;
   setConnectionStatus("Connected to shared board.", "ok");
+  clearSetupBanner();
+  const migrationOk = await checkMigrationHealth();
+  if (!migrationOk) {
+    return;
+  }
   await ensureDefaultMembers();
   await ensureDefaultTrip();
   await refreshAllData();
   subscribeRealtime();
+}
+
+async function checkMigrationHealth() {
+  const checks = await Promise.all([
+    supabase.from("trips").select("id").limit(1),
+    supabase.from("votes").select("id").limit(1),
+    supabase.from("activities").select("id,trip_id,cost").limit(1),
+  ]);
+  const failed = checks.find((result) => result.error);
+  if (!failed) {
+    clearSetupBanner();
+    return true;
+  }
+  const message = failed.error?.message || "Schema validation failed.";
+  showSetupBanner(
+    `Database migration missing or incomplete. Re-run supabase-schema.sql in Supabase SQL Editor, then reconnect. (${message})`
+  );
+  setConnectionStatus("Migration required. Run schema SQL.", "warn");
+  return false;
 }
 
 function subscribeRealtime() {
@@ -700,6 +732,22 @@ function setConnectionStatus(message, stateClass) {
   if (stateClass) {
     connectionStatus.classList.add(stateClass);
   }
+}
+
+function showSetupBanner(message) {
+  if (!setupBanner) {
+    return;
+  }
+  setupBanner.textContent = message;
+  setupBanner.classList.remove("hidden");
+}
+
+function clearSetupBanner() {
+  if (!setupBanner) {
+    return;
+  }
+  setupBanner.textContent = "";
+  setupBanner.classList.add("hidden");
 }
 
 function escapeHtml(text) {

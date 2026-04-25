@@ -31,6 +31,7 @@
         </form>
       </details>
     </header>
+    <div id="setup-banner" class="setup-banner hidden"></div>
 
     <main class="layout">
       <section class="panel insights-panel">
@@ -141,14 +142,6 @@
       </article>
     </template>
 
-    <script
-      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-      crossorigin=""
-    ></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./script.js"></script>
-
     <div id="trip-modal" class="modal-overlay hidden">
       <div class="modal-card">
         <h2>Create New Trip</h2>
@@ -177,5 +170,13 @@
         </form>
       </div>
     </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./script.js"></script>
   </body>
 </html>
