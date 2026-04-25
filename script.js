@@ -739,11 +739,12 @@ async function geocodeAddress() {
 }
 
 async function loadWmsLayersFromUrl() {
-  const baseUrl = wmsUrlInput.value.trim();
+  const baseUrl = normalizeWmsServiceUrl(wmsUrlInput.value.trim());
   if (!baseUrl) {
     showWmsError("Enter a WMS URL.");
     return;
   }
+  wmsUrlInput.value = baseUrl;
   clearWmsError();
   wmsLayerSelector.classList.add("hidden");
   wmsLayerOptions.innerHTML = "";
@@ -758,7 +759,12 @@ async function loadWmsLayersFromUrl() {
     renderWmsLayerOptions();
     wmsLayerSelector.classList.remove("hidden");
   } catch (error) {
-    showWmsError(error.message || "Unable to load WMS layers.");
+    const msg = String(error.message || "Unable to load WMS layers.");
+    if (msg.includes("Failed to fetch")) {
+      showWmsError("Request blocked or host unavailable. Check HTTPS/CORS and confirm the service URL is reachable.");
+      return;
+    }
+    showWmsError(msg);
   }
 }
 
@@ -784,7 +790,7 @@ function addSelectedWmsLayers() {
     showWmsError("Select at least one layer.");
     return;
   }
-  const url = wmsUrlInput.value.trim();
+  const url = normalizeWmsServiceUrl(wmsUrlInput.value.trim());
   selected.forEach((input) => {
     if (wmsLayerMap.has(input.value)) return;
     const layer = L.tileLayer.wms(url, {
@@ -792,6 +798,7 @@ function addSelectedWmsLayers() {
       format: "image/png",
       transparent: true,
       opacity: 0.55,
+      version: "1.3.0",
     }).addTo(map);
     wmsLayerMap.set(input.value, {
       name: input.value,
@@ -844,7 +851,32 @@ function renderActiveLayersPanel() {
 }
 
 function buildGetCapabilitiesUrl(url) {
-  return `${url}${url.includes("?") ? "&" : "?"}service=WMS&request=GetCapabilities`;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.3.0`;
+}
+
+function normalizeWmsServiceUrl(rawUrl) {
+  let value = String(rawUrl || "").trim();
+  if (!value) return "";
+  // Prevent mixed-content blocks when app is served over HTTPS.
+  if (value.startsWith("http://")) value = `https://${value.slice("http://".length)}`;
+  value = value.replace(/\?+$/, "");
+  // Some services include operation hints in shared URLs; keep only base endpoint.
+  if (/service=wms/i.test(value) || /request=/i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      parsed.searchParams.delete("service");
+      parsed.searchParams.delete("SERVICE");
+      parsed.searchParams.delete("request");
+      parsed.searchParams.delete("REQUEST");
+      parsed.searchParams.delete("version");
+      parsed.searchParams.delete("VERSION");
+      value = parsed.toString().replace(/\?$/, "");
+    } catch {
+      return value;
+    }
+  }
+  return value;
 }
 
 function extractNamedLayers(xmlDoc) {
