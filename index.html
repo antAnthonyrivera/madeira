@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Madeira Crew Planner</title>
+    <link rel="preconnect" href="https://unpkg.com" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>Madeira Crew Planner</h1>
+        <p>Plan your route, discuss options, and settle each day together.</p>
+      </div>
+      <div class="share-tip">
+        <strong>Sharing:</strong> run on your machine and open from your team phones/laptops on the same Wi-Fi.
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel controls">
+        <h2>Team Setup</h2>
+        <form id="member-form" class="stack">
+          <label for="member-name">Add member</label>
+          <div class="row">
+            <input id="member-name" placeholder="e.g. Antalog" maxlength="24" />
+            <button type="submit">Add</button>
+          </div>
+        </form>
+        <div id="member-list" class="chips"></div>
+      </section>
+
+      <section class="panel map-panel">
+        <h2>Madeira Map</h2>
+        <div id="map"></div>
+      </section>
+
+      <section class="panel activity-panel">
+        <h2>Add Activity</h2>
+        <form id="activity-form" class="stack">
+          <label for="activity-title">Title</label>
+          <input id="activity-title" required maxlength="80" placeholder="PR8 Ponta de Sao Lourenco" />
+
+          <label for="activity-day">Day</label>
+          <input id="activity-day" required placeholder="Sunday, May 31" />
+
+          <label for="activity-time">Start time</label>
+          <input id="activity-time" required placeholder="09:30" />
+
+          <label for="activity-notes">Details</label>
+          <textarea
+            id="activity-notes"
+            rows="3"
+            placeholder="Bring water, wind layer, QR ticket..."
+          ></textarea>
+
+          <label for="activity-location">Place name (for map pin)</label>
+          <div class="row">
+            <input id="activity-location" placeholder="e.g. Porto Moniz" />
+            <button type="button" id="place-on-map">Pick on Map</button>
+          </div>
+
+          <label for="activity-lat">Latitude</label>
+          <input id="activity-lat" placeholder="32.7607" />
+
+          <label for="activity-lng">Longitude</label>
+          <input id="activity-lng" placeholder="-17.1462" />
+
+          <button type="submit">Save Activity</button>
+        </form>
+      </section>
+
+      <section class="panel plans-panel">
+        <div class="row between">
+          <h2>Plan Board</h2>
+          <button id="clear-data" class="danger">Reset Planner</button>
+        </div>
+        <div id="activity-list" class="stack"></div>
+      </section>
+    </main>
+
+    <template id="activity-template">
+      <article class="activity-card">
+        <div class="row between">
+          <h3 class="activity-title"></h3>
+          <button class="small delete-activity">Delete</button>
+        </div>
+        <p class="meta"></p>
+        <p class="notes"></p>
+        <div class="mentions"></div>
+        <form class="comment-form stack">
+          <label>Comment</label>
+          <textarea rows="2" maxlength="240" placeholder="Use @Name to tag teammates"></textarea>
+          <button type="submit" class="small">Post Comment</button>
+        </form>
+        <div class="comment-list stack"></div>
+      </article>
+    </template>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="./script.js"></script>
+  </body>
+</html>

@@ -1,0 +1,213 @@
+:root {
+  color-scheme: light;
+  --bg: #f6f8fb;
+  --panel: #ffffff;
+  --line: #dbe2ea;
+  --text: #182235;
+  --muted: #52627a;
+  --accent: #0f6fff;
+  --danger: #b42318;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.3rem;
+}
+
+h2 {
+  font-size: 1rem;
+  margin-bottom: 0.7rem;
+}
+
+.share-tip {
+  max-width: 380px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.layout {
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  grid-template-areas:
+    "controls map activity"
+    "plans plans plans";
+  gap: 1rem;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.9rem;
+}
+
+.controls {
+  grid-area: controls;
+}
+
+.map-panel {
+  grid-area: map;
+}
+
+.activity-panel {
+  grid-area: activity;
+}
+
+.plans-panel {
+  grid-area: plans;
+}
+
+#map {
+  height: 420px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.stack {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.between {
+  justify-content: space-between;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+textarea {
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+button {
+  border: none;
+  background: var(--accent);
+  color: white;
+  border-radius: 8px;
+  padding: 0.55rem 0.8rem;
+  cursor: pointer;
+}
+
+button.small {
+  font-size: 0.84rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.danger {
+  background: var(--danger);
+}
+
+.chips {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip {
+  background: #edf4ff;
+  border: 1px solid #cbdcf7;
+  color: #28539d;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.85rem;
+}
+
+.activity-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.notes {
+  white-space: pre-wrap;
+}
+
+.mentions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.mention {
+  background: #f2ecff;
+  color: #5e3ab8;
+  border: 1px solid #e3d7ff;
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.comment {
+  border-top: 1px dashed var(--line);
+  padding-top: 0.45rem;
+  font-size: 0.92rem;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "controls"
+      "map"
+      "activity"
+      "plans";
+  }
+
+  #map {
+    height: 330px;
+  }
+}
