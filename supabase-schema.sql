@@ -2,8 +2,11 @@ create extension if not exists pgcrypto;
 
 create table if not exists public.members (
   name text primary key,
+  layers_collapsed boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+alter table public.members add column if not exists layers_collapsed boolean not null default false;
 
 create table if not exists public.activities (
   id uuid primary key default gen_random_uuid(),

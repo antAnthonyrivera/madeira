@@ -239,6 +239,14 @@ h2 {
   gap: 0.5rem;
 }
 
+.section-header {
+  margin-bottom: 0.25rem;
+}
+
+.right-actions {
+  margin-left: auto;
+}
+
 .section-divider {
   border-top: 1px solid var(--line);
   margin: 0.2rem 0;
@@ -503,26 +511,53 @@ button.small {
 
 .side-panel {
   height: min(84vh, 920px);
-  overflow: auto;
-  display: grid;
-  gap: 0.7rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.activity-section {
+  min-height: 0;
+  flex: 2 1 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.layers-section {
+  min-height: 0;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.layers-section.collapsed {
+  flex: 0 0 auto;
+}
+
+.layers-section.collapsed #active-layer-list {
+  display: none;
 }
 
 #daily-activity-list,
 #notification-list,
 #active-layer-list {
-  max-height: 22vh;
   overflow: auto;
 }
 
 #daily-activity-list {
-  max-height: 70vh;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#active-layer-list {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .side-panel h3 {
-  margin-top: 0.25rem;
-  margin-bottom: 0.35rem;
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 #activity-modal {

@@ -1,5 +1,7 @@
 const SUPABASE_URL = "https://rwibuoccrcgrozysfwfw.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_l5KJxT_og6A7VKKK2-5MOg_wtBEDb7F";
+const GEMINI_EDGE_FUNCTION_URL = "";
+const GEMINI_API_KEY_CACHE_KEY = "trip-planner-gemini-key";
 const DEFAULT_MEMBERS = ["Anthony", "Vivian", "Jason", "Darrell"];
 const DEFAULT_TRIP = { id: "00000000-0000-4000-8000-000000000001", name: "Madeira" };
 const DEFAULT_WMS_URL = "";
@@ -44,8 +46,9 @@ const weatherDropdownToggle = document.querySelector("#weather-dropdown-toggle")
 const weatherDropdown = document.querySelector("#weather-dropdown");
 const rangeDropdownToggle = document.querySelector("#range-dropdown-toggle");
 const rangeDropdown = document.querySelector("#range-dropdown");
-const clearDataButton = document.querySelector("#clear-data");
 const activeLayerList = document.querySelector("#active-layer-list");
+const layersSection = document.querySelector(".layers-section");
+const toggleLayersCollapseButton = document.querySelector("#toggle-layers-collapse");
 const presetTodayButton = document.querySelector("#preset-today");
 const presetWeekendButton = document.querySelector("#preset-weekend");
 const presetWholeTripButton = document.querySelector("#preset-whole-trip");
@@ -172,7 +175,7 @@ function setupHandlers() {
   currentUserSelect.addEventListener("change", () => {
     state.currentUserName = currentUserSelect.value;
     saveState();
-    renderNotifications();
+    renderAll();
   });
   notificationBell.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -217,6 +220,12 @@ function setupHandlers() {
     }
     state.currentUserName = state.currentUserName || name;
     newMemberNameInput.value = "";
+    saveState();
+    renderAll();
+  });
+  toggleLayersCollapseButton.addEventListener("click", () => {
+    const current = getCurrentUserPreferences();
+    current.layersCollapsed = !Boolean(current.layersCollapsed);
     saveState();
     renderAll();
   });
@@ -323,17 +332,6 @@ function setupHandlers() {
     renderAll();
   });
 
-  clearDataButton.addEventListener("click", () => {
-    if (!window.confirm("Reset activities, notifications, and map layers for all trips?")) return;
-    state = defaultState();
-    selectedDay = todayIso();
-    rangeStartInput.value = selectedDay;
-    rangeEndInput.value = selectedDay;
-    wmsLayerMap.forEach((entry) => map.removeLayer(entry.layer));
-    wmsLayerMap.clear();
-    saveState();
-    renderAll();
-  });
 }
 
 function renderAll() {
@@ -341,6 +339,7 @@ function renderAll() {
   renderTripList();
   renderTripMembers();
   renderCurrentUserOptions();
+  renderLayersSectionState();
   renderNotifications();
   renderMapPins();
   renderActiveLayersPanel();
@@ -421,6 +420,23 @@ function getCurrentTripMembers() {
   const fallback = [...state.members];
   state.tripMembersByTripId[state.currentTripId] = fallback;
   return state.tripMembersByTripId[state.currentTripId];
+}
+
+function getCurrentUserPreferences() {
+  if (!state.userPreferencesByName || typeof state.userPreferencesByName !== "object") {
+    state.userPreferencesByName = {};
+  }
+  const key = state.currentUserName || "default";
+  if (!state.userPreferencesByName[key] || typeof state.userPreferencesByName[key] !== "object") {
+    state.userPreferencesByName[key] = { layersCollapsed: false };
+  }
+  return state.userPreferencesByName[key];
+}
+
+function renderLayersSectionState() {
+  const collapsed = Boolean(getCurrentUserPreferences().layersCollapsed);
+  layersSection.classList.toggle("collapsed", collapsed);
+  toggleLayersCollapseButton.textContent = collapsed ? "Expand" : "Collapse";
 }
 
 function renderTripMembers() {
@@ -902,6 +918,9 @@ function defaultState() {
     tripMembersByTripId: {
       [DEFAULT_TRIP.id]: [...DEFAULT_MEMBERS],
     },
+    userPreferencesByName: {
+      [DEFAULT_MEMBERS[0]]: { layersCollapsed: false },
+    },
     activities: [],
     notifications: [],
   };
@@ -1009,7 +1028,7 @@ async function bootstrapRemoteState() {
   if (!tripsError && (!trips || !trips.length)) {
     await supabaseClient.from("trips").insert([{ id: DEFAULT_TRIP.id, name: DEFAULT_TRIP.name }]);
   }
-  const memberRows = DEFAULT_MEMBERS.map((name) => ({ name }));
+  const memberRows = DEFAULT_MEMBERS.map((name) => ({ name, layers_collapsed: false }));
   await supabaseClient.from("members").upsert(memberRows, { onConflict: "name" });
 }
 
@@ -1046,6 +1065,11 @@ async function refreshStateFromRemote() {
     members: (membersRes.data || []).map((member) => member.name).filter(Boolean),
     currentUserName: nextCurrentUser,
     tripMembersByTripId: nextTripMembers,
+    userPreferencesByName: (membersRes.data || []).reduce((acc, member) => {
+      if (!member?.name) return acc;
+      acc[member.name] = { layersCollapsed: Boolean(member.layers_collapsed) };
+      return acc;
+    }, {}),
     activities: (activitiesRes.data || []).map((row) => ({
       id: row.id,
       tripId: row.trip_id || currentTripId,
@@ -1076,6 +1100,13 @@ async function refreshStateFromRemote() {
 
 async function syncStateToRemote() {
   if (!supabaseClient) return;
+  const memberRows = state.members.map((name) => ({
+    name,
+    layers_collapsed: Boolean(state.userPreferencesByName?.[name]?.layersCollapsed),
+  }));
+  const membersWrite = await supabaseClient.from("members").upsert(memberRows, { onConflict: "name" });
+  throwIfSupabaseError(membersWrite.error, "saving members");
+
   const tripRows = state.trips.map((trip) => ({ id: trip.id, name: trip.name }));
   const tripsWrite = await supabaseClient.from("trips").upsert(tripRows, { onConflict: "id" });
   throwIfSupabaseError(tripsWrite.error, "saving trips");
@@ -1533,7 +1564,7 @@ async function runMagicImport() {
     return;
   }
   const apiKey = await ensureGeminiApiKey();
-  if (!apiKey) {
+  if (!apiKey && !GEMINI_EDGE_FUNCTION_URL) {
     magicImportStatus.textContent = "Gemini API key is required.";
     magicImportStatus.className = "status-text warn";
     return;
@@ -1568,7 +1599,7 @@ ${text}`;
 
 async function runTripIntelligence() {
   const apiKey = await ensureGeminiApiKey();
-  if (!apiKey) {
+  if (!apiKey && !GEMINI_EDGE_FUNCTION_URL) {
     tripIntelligenceOutput.innerHTML = `<p class="meta">Gemini API key is required.</p>`;
     return;
   }
@@ -1686,14 +1717,35 @@ function normalizeTimeText(value) {
 }
 
 async function ensureGeminiApiKey() {
+  if (GEMINI_EDGE_FUNCTION_URL) return "";
   if (geminiApiKey) return geminiApiKey;
+  const cached = window.localStorage.getItem(GEMINI_API_KEY_CACHE_KEY);
+  if (cached && cached.trim()) {
+    geminiApiKey = cached.trim();
+    return geminiApiKey;
+  }
   const value = window.prompt("Enter Gemini API key (AI Studio key):");
   if (!value || !value.trim()) return "";
   geminiApiKey = value.trim();
+  window.localStorage.setItem(GEMINI_API_KEY_CACHE_KEY, geminiApiKey);
   return geminiApiKey;
 }
 
 async function callGemini(prompt, apiKey) {
+  if (GEMINI_EDGE_FUNCTION_URL) {
+    const proxyResponse = await fetch(GEMINI_EDGE_FUNCTION_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+    if (!proxyResponse.ok) {
+      throw new Error(`Gemini proxy failed (${proxyResponse.status})`);
+    }
+    const proxyPayload = await proxyResponse.json();
+    const proxyText = String(proxyPayload?.text || "").trim();
+    if (!proxyText) throw new Error("Gemini proxy returned empty response.");
+    return proxyText;
+  }
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
   const body = JSON.stringify({

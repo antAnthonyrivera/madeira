@@ -126,22 +126,32 @@
       </section>
 
       <section class="panel side-panel">
-        <div class="row actions-row">
-          <h3 id="activities-title">Activities (0)</h3>
-          <button id="open-activity-modal" type="button" class="small">+ Add</button>
-          <button id="open-wms-modal" type="button" class="small">Add Layer</button>
-          <button id="clear-data" class="danger small">Reset</button>
-        </div>
-
-        <div id="daily-activity-list" class="stack section-list">
-          <p class="empty">No activities for selected day.</p>
-        </div>
+        <section class="activity-section">
+          <div class="row between section-header">
+            <h3 id="activities-title">Activities (0)</h3>
+            <div class="row right-actions">
+              <button id="open-activity-modal" type="button" class="small">+ Add</button>
+            </div>
+          </div>
+          <div id="daily-activity-list" class="stack section-list">
+            <p class="empty">No activities for selected day.</p>
+          </div>
+        </section>
 
         <div class="section-divider"></div>
-        <h3>Layers</h3>
-        <div id="active-layer-list" class="stack section-list">
-          <p class="empty">No WMS layers active.</p>
-        </div>
+
+        <section class="layers-section">
+          <div class="row between section-header">
+            <h3>Layers</h3>
+            <div class="row right-actions">
+              <button id="toggle-layers-collapse" type="button" class="small">Collapse</button>
+              <button id="open-wms-modal" type="button" class="small">Add Layer</button>
+            </div>
+          </div>
+          <div id="active-layer-list" class="stack section-list">
+            <p class="empty">No WMS layers active.</p>
+          </div>
+        </section>
       </section>
     </main>
 
