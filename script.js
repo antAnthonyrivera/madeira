@@ -22,6 +22,9 @@ let geminiApiKey = "";
 const selectedTripBrand = document.querySelector("#selected-trip-brand");
 const syncStatusPill = document.querySelector("#sync-status");
 const tripList = document.querySelector("#trip-list");
+const tripMemberList = document.querySelector("#trip-member-list");
+const newMemberNameInput = document.querySelector("#new-member-name");
+const addMemberButton = document.querySelector("#add-member-btn");
 const addTripButton = document.querySelector("#add-trip-btn");
 const notificationList = document.querySelector("#notification-list");
 const rangeStartInput = document.querySelector("#range-start");
@@ -31,6 +34,7 @@ const mapWeatherBadge = document.querySelector("#map-weather-badge");
 const dailyActivityList = document.querySelector("#daily-activity-list");
 const activitiesTitle = document.querySelector("#activities-title");
 const notificationFilter = document.querySelector("#notification-filter");
+const currentUserSelect = document.querySelector("#current-user-select");
 const notificationBell = document.querySelector("#notification-bell");
 const notificationDot = document.querySelector("#notification-dot");
 const notificationPanel = document.querySelector("#notification-panel");
@@ -75,6 +79,7 @@ const closeMagicImportModalButton = document.querySelector("#close-magic-import-
 const magicImportText = document.querySelector("#magic-import-text");
 const runMagicImportButton = document.querySelector("#run-magic-import");
 const magicImportStatus = document.querySelector("#magic-import-status");
+const magicImportMode = document.querySelector("#magic-import-mode");
 const tripIntelligenceModal = document.querySelector("#trip-intelligence-modal");
 const closeTripIntelligenceModalButton = document.querySelector("#close-trip-intelligence-modal");
 const runTripIntelligenceButton = document.querySelector("#run-trip-intelligence");
@@ -164,6 +169,11 @@ function setupHandlers() {
   notificationFilter.addEventListener("change", () => {
     renderNotifications();
   });
+  currentUserSelect.addEventListener("change", () => {
+    state.currentUserName = currentUserSelect.value;
+    saveState();
+    renderNotifications();
+  });
   notificationBell.addEventListener("click", (event) => {
     event.stopPropagation();
     toggleDropdown("notifications");
@@ -193,6 +203,21 @@ function setupHandlers() {
     state.currentTripId = trip.id;
     saveState();
     closeAllDropdowns();
+    renderAll();
+  });
+  addMemberButton.addEventListener("click", () => {
+    const name = String(newMemberNameInput.value || "").trim();
+    if (!name) return;
+    const tripMembers = getCurrentTripMembers();
+    if (!tripMembers.includes(name)) {
+      tripMembers.push(name);
+    }
+    if (!state.members.includes(name)) {
+      state.members.push(name);
+    }
+    state.currentUserName = state.currentUserName || name;
+    newMemberNameInput.value = "";
+    saveState();
     renderAll();
   });
 
@@ -314,6 +339,8 @@ function setupHandlers() {
 function renderAll() {
   renderTripHeader();
   renderTripList();
+  renderTripMembers();
+  renderCurrentUserOptions();
   renderNotifications();
   renderMapPins();
   renderActiveLayersPanel();
@@ -385,9 +412,76 @@ function renderTripList() {
   });
 }
 
+function getCurrentTripMembers() {
+  if (!state.tripMembersByTripId || typeof state.tripMembersByTripId !== "object") {
+    state.tripMembersByTripId = {};
+  }
+  const existing = state.tripMembersByTripId[state.currentTripId];
+  if (Array.isArray(existing) && existing.length) return existing;
+  const fallback = [...state.members];
+  state.tripMembersByTripId[state.currentTripId] = fallback;
+  return state.tripMembersByTripId[state.currentTripId];
+}
+
+function renderTripMembers() {
+  tripMemberList.innerHTML = "";
+  const members = getCurrentTripMembers();
+  if (!members.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "No people added yet.";
+    tripMemberList.appendChild(empty);
+    return;
+  }
+  members.forEach((member) => {
+    const row = document.createElement("div");
+    row.className = "member-row";
+    const name = document.createElement("span");
+    name.textContent = member;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "member-remove-btn";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const next = getCurrentTripMembers().filter((item) => item !== member);
+      state.tripMembersByTripId[state.currentTripId] = next;
+      if (state.currentUserName === member) {
+        state.currentUserName = next[0] || "";
+      }
+      saveState();
+      renderAll();
+    });
+    row.append(name, remove);
+    tripMemberList.appendChild(row);
+  });
+}
+
+function renderCurrentUserOptions() {
+  currentUserSelect.innerHTML = "";
+  const members = getCurrentTripMembers();
+  if (!members.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No members";
+    currentUserSelect.appendChild(option);
+    return;
+  }
+  if (!state.currentUserName || !members.includes(state.currentUserName)) {
+    state.currentUserName = members[0];
+  }
+  members.forEach((member) => {
+    const option = document.createElement("option");
+    option.value = member;
+    option.textContent = member;
+    if (member === state.currentUserName) option.selected = true;
+    currentUserSelect.appendChild(option);
+  });
+}
+
 function renderTagMemberCheckboxes() {
   activityTagsHost.innerHTML = "";
-  state.members.forEach((member) => {
+  getCurrentTripMembers().forEach((member) => {
     const label = document.createElement("label");
     label.className = "chip";
     const checkbox = document.createElement("input");
@@ -489,7 +583,7 @@ function renderNotifications() {
   notificationDot.classList.toggle("hidden", allUnhandled.length === 0);
   const unhandled = allUnhandled.filter((notification) => {
     if (notificationFilter.value === "mine") {
-      return notification.userName === DEFAULT_MEMBERS[0];
+      return notification.userName === state.currentUserName;
     }
     return true;
   });
@@ -789,11 +883,12 @@ function getUnhandledNotificationsForCurrentTrip() {
   const currentTripActivityIds = new Set(
     state.activities.filter((activity) => activity.tripId === state.currentTripId).map((activity) => activity.id)
   );
+  const tripMembers = new Set(getCurrentTripMembers());
   return state.notifications.filter(
     (notification) =>
       !notification.handled &&
       notification.tripId === state.currentTripId &&
-      state.members.includes(notification.userName) &&
+      tripMembers.has(notification.userName) &&
       currentTripActivityIds.has(notification.activityId)
   );
 }
@@ -803,6 +898,10 @@ function defaultState() {
     trips: [DEFAULT_TRIP],
     currentTripId: DEFAULT_TRIP.id,
     members: [...DEFAULT_MEMBERS],
+    currentUserName: DEFAULT_MEMBERS[0],
+    tripMembersByTripId: {
+      [DEFAULT_TRIP.id]: [...DEFAULT_MEMBERS],
+    },
     activities: [],
     notifications: [],
   };
@@ -841,6 +940,22 @@ function ensureValidTripIds() {
       tripId: tripIdMap.get(rawTripId) || (isUuid(rawTripId) ? rawTripId : state.currentTripId),
     };
   });
+  const nextTripMembers = {};
+  const currentTripMembersSource = state.tripMembersByTripId || {};
+  Object.entries(currentTripMembersSource).forEach(([tripId, members]) => {
+    const mappedTripId = tripIdMap.get(String(tripId || "").trim()) || tripId;
+    nextTripMembers[mappedTripId] = Array.isArray(members) ? members : [];
+  });
+  state.trips.forEach((trip) => {
+    if (!Array.isArray(nextTripMembers[trip.id]) || !nextTripMembers[trip.id].length) {
+      nextTripMembers[trip.id] = [...DEFAULT_MEMBERS];
+    }
+  });
+  state.tripMembersByTripId = nextTripMembers;
+  const currentMembers = nextTripMembers[state.currentTripId] || [];
+  if (!state.currentUserName || !currentMembers.includes(state.currentUserName)) {
+    state.currentUserName = currentMembers[0] || "";
+  }
 }
 
 function isUuid(value) {
@@ -917,10 +1032,20 @@ async function refreshStateFromRemote() {
   }
   const trips = (tripsRes.data || []).map((trip) => ({ id: trip.id, name: trip.name }));
   const currentTripId = trips.some((trip) => trip.id === state.currentTripId) ? state.currentTripId : trips[0]?.id || DEFAULT_TRIP.id;
+  const nextTripMembers = { ...(state.tripMembersByTripId || {}) };
+  trips.forEach((trip) => {
+    const existing = Array.isArray(nextTripMembers[trip.id]) ? nextTripMembers[trip.id] : [];
+    nextTripMembers[trip.id] = existing.length ? existing : [...DEFAULT_MEMBERS];
+  });
+  const currentMembers = Array.isArray(nextTripMembers[currentTripId]) ? nextTripMembers[currentTripId] : [...DEFAULT_MEMBERS];
+  const nextCurrentUser =
+    currentMembers.includes(state.currentUserName) && state.currentUserName ? state.currentUserName : currentMembers[0] || "";
   state = {
     trips: trips.length ? trips : [DEFAULT_TRIP],
     currentTripId,
     members: (membersRes.data || []).map((member) => member.name).filter(Boolean),
+    currentUserName: nextCurrentUser,
+    tripMembersByTripId: nextTripMembers,
     activities: (activitiesRes.data || []).map((row) => ({
       id: row.id,
       tripId: row.trip_id || currentTripId,
@@ -1062,9 +1187,9 @@ function setupRealtimeSubscriptions() {
 }
 
 async function updateWeatherForecast() {
-  if (!selectedDay) {
+  if (!selectedDay || !/^\d{4}-\d{2}-\d{2}$/.test(String(selectedDay))) {
     selectedDayWeather = null;
-    weatherForecast.innerHTML = `<p class="meta">Pick a date to load weather forecast.</p>`;
+    weatherForecast.innerHTML = `<p class="meta">Pick a valid date (YYYY-MM-DD) to load weather forecast.</p>`;
     mapWeatherBadge.textContent = "Weather: --";
     return;
   }
@@ -1430,7 +1555,7 @@ ${text}`;
     if (!parsed || !Array.isArray(parsed.activities)) {
       throw new Error("AI response format invalid.");
     }
-    applyMagicImportPayload(parsed);
+    applyMagicImportPayload(parsed, magicImportMode.value);
     saveState();
     renderAll();
     magicImportStatus.textContent = `Imported ${parsed.activities.length} activities.`;
@@ -1463,18 +1588,26 @@ async function runTripIntelligence() {
   }
   tripIntelligenceOutput.innerHTML = `<p class="meta">Analyzing itinerary...</p>`;
   const prompt = `You are a travel strategist. Analyze this itinerary and respond with JSON only:
-{"summary":"string","missingSuggestion":"string"}
+{"summaryHeader":"string","summaryBullets":["string"],"missingHeader":"string","missingBullets":["string"]}
 Trip: ${activeTrip?.name || "Unknown"}
 Activities:
 ${activities.join("\n")}`;
   try {
     const raw = await callGemini(prompt, apiKey);
     const parsed = extractJsonPayload(raw);
+    const summaryHeader = escapeHtml(parsed.summaryHeader || "High-Level Summary");
+    const missingHeader = escapeHtml(parsed.missingHeader || "Major Missing Suggestion");
+    const summaryBullets = Array.isArray(parsed.summaryBullets) ? parsed.summaryBullets : [];
+    const missingBullets = Array.isArray(parsed.missingBullets) ? parsed.missingBullets : [];
     tripIntelligenceOutput.innerHTML = `
-      <p><strong>High-Level Summary</strong></p>
-      <p class="meta">${escapeHtml(parsed.summary || "No summary returned.")}</p>
-      <p style="margin-top:0.5rem;"><strong>Major Missing Suggestion</strong></p>
-      <p class="meta">${escapeHtml(parsed.missingSuggestion || "No suggestion returned.")}</p>
+      <p><strong>${summaryHeader}</strong></p>
+      <ul class="ai-bullet-list">${summaryBullets
+        .map((item) => `<li>${escapeHtml(item)}</li>`)
+        .join("") || "<li>No summary returned.</li>"}</ul>
+      <p style="margin-top:0.5rem;"><strong>${missingHeader}</strong></p>
+      <ul class="ai-bullet-list">${missingBullets
+        .map((item) => `<li>${escapeHtml(item)}</li>`)
+        .join("") || "<li>No suggestion returned.</li>"}</ul>
     `;
   } catch (error) {
     tripIntelligenceOutput.innerHTML = `<p class="meta">Unable to generate summary: ${escapeHtml(
@@ -1483,14 +1616,23 @@ ${activities.join("\n")}`;
   }
 }
 
-function applyMagicImportPayload(payload) {
+function applyMagicImportPayload(payload, mode = "current") {
   const tripByName = new Map(state.trips.map((trip) => [trip.name.toLowerCase(), trip]));
+  let forcedTrip = null;
+  if (mode === "new") {
+    const suggestedName = String(payload?.trips?.[0]?.name || "").trim();
+    const name = suggestedName || `Imported Trip ${new Date().toLocaleDateString()}`;
+    forcedTrip = { id: crypto.randomUUID(), name };
+    state.trips.push(forcedTrip);
+    state.currentTripId = forcedTrip.id;
+    tripByName.set(name.toLowerCase(), forcedTrip);
+  }
   if (Array.isArray(payload.trips)) {
     payload.trips.forEach((tripInput) => {
       const name = String(tripInput?.name || "").trim();
       if (!name) return;
       const key = name.toLowerCase();
-      if (!tripByName.has(key)) {
+      if (!tripByName.has(key) && mode !== "current") {
         const trip = { id: crypto.randomUUID(), name };
         state.trips.push(trip);
         tripByName.set(key, trip);
@@ -1503,7 +1645,11 @@ function applyMagicImportPayload(payload) {
     const time = normalizeTimeText(item?.time || "");
     if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !time) return;
     const tripName = String(item?.tripName || "").trim().toLowerCase();
-    const trip = (tripName && tripByName.get(tripName)) || state.trips.find((t) => t.id === state.currentTripId) || state.trips[0];
+    const trip =
+      forcedTrip ||
+      (tripName && tripByName.get(tripName)) ||
+      state.trips.find((t) => t.id === state.currentTripId) ||
+      state.trips[0];
     const category = normalizeCategoryEmoji(item?.category);
     state.activities.push({
       id: crypto.randomUUID(),
