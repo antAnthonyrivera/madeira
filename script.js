@@ -1885,8 +1885,8 @@ async function applyMagicImportPayload(payload, mode = "current") {
   for (const item of activityInputs) {
     const title = String(item?.title || "").trim();
     const day = normalizeImportDay(item?.day, importYear);
-    const time = normalizeTimeText(item?.time || "");
-    if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !time) continue;
+    const time = normalizeTimeText(item?.time || "") || "09:00";
+    if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
     importedDays.push(day);
     const tripName = String(item?.tripName || "").trim().toLowerCase();
     const trip =
@@ -1941,7 +1941,7 @@ function promptForImportYear() {
 }
 
 function normalizeImportDay(dayValue, fallbackYear = "") {
-  const raw = String(dayValue || "").trim();
+  const raw = normalizeImportDateTypos(String(dayValue || "").trim());
   if (!raw) return "";
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
   if (/^\d{1,2}\/\d{1,2}$/.test(raw) && fallbackYear) {
@@ -1959,6 +1959,18 @@ function normalizeImportDay(dayValue, fallbackYear = "") {
   const withYear = !hasExplicitYear(raw) && fallbackYear ? `${raw} ${fallbackYear}` : raw;
   const normalized = normalizeDayForSort(withYear);
   return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : "";
+}
+
+function normalizeImportDateTypos(value) {
+  let text = String(value || "").trim();
+  if (!text) return "";
+  // Common month misspellings from pasted notes.
+  text = text.replace(/\baril\b/gi, "april");
+  text = text.replace(/\baprill\b/gi, "april");
+  text = text.replace(/\bjanurary\b/gi, "january");
+  text = text.replace(/\bfeburary\b/gi, "february");
+  text = text.replace(/\bsept\b/gi, "september");
+  return text;
 }
 
 function normalizeCategoryEmoji(raw) {
