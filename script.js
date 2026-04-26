@@ -1403,6 +1403,25 @@ async function updateWeatherForecast() {
     mapWeatherBadge.textContent = "Weather: --";
     return;
   }
+  const selectedDate = new Date(`${selectedDay}T00:00:00Z`);
+  if (Number.isNaN(selectedDate.getTime())) {
+    selectedDayWeather = null;
+    weatherForecast.innerHTML = `<p class="meta">Pick a valid date (YYYY-MM-DD) to load weather forecast.</p>`;
+    mapWeatherBadge.textContent = "Weather: --";
+    return;
+  }
+  const now = new Date();
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const maxForecastUtc = new Date(todayUtc);
+  maxForecastUtc.setUTCDate(maxForecastUtc.getUTCDate() + 16);
+  if (selectedDate < todayUtc || selectedDate > maxForecastUtc) {
+    selectedDayWeather = null;
+    weatherForecast.innerHTML = `<p class="meta">Forecast unavailable for ${escapeHtml(
+      selectedDay
+    )}. Open-Meteo forecast supports today through about 16 days ahead.</p>`;
+    mapWeatherBadge.textContent = "Weather: unavailable";
+    return;
+  }
   weatherForecast.innerHTML = `<p class="meta">Loading weather forecast...</p>`;
   mapWeatherBadge.textContent = "Weather: loading...";
   try {
@@ -1876,7 +1895,12 @@ async function applyMagicImportPayload(payload, mode = "current") {
       state.trips.find((t) => t.id === state.currentTripId) ||
       state.trips[0];
     const category = normalizeCategoryEmoji(item?.category);
-    const inferredCoords = await inferImportCoordinates(item, trip?.name || "");
+    let inferredCoords = null;
+    try {
+      inferredCoords = await inferImportCoordinates(item, trip?.name || "");
+    } catch {
+      inferredCoords = null;
+    }
     state.activities.push({
       id: crypto.randomUUID(),
       tripId: trip.id,
