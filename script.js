@@ -1236,8 +1236,8 @@ async function refreshStateFromRemote() {
       notes: row.notes || "",
       location: row.location || "",
       address: row.address || "",
-      lat: Number.isFinite(Number(row.lat)) ? Number(row.lat) : null,
-      lng: Number.isFinite(Number(row.lng)) ? Number(row.lng) : null,
+      lat: parseNullableNumber(row.lat),
+      lng: parseNullableNumber(row.lng),
       taggedMembers: Array.isArray(row.tagged_members) ? row.tagged_members : [],
       pinHidden: Boolean(row.pin_hidden),
       createdAt: row.created_at || new Date().toISOString(),
@@ -1765,10 +1765,15 @@ ${text}`;
     if (!parsed || !Array.isArray(parsed.activities)) {
       throw new Error("AI response format invalid.");
     }
-    applyMagicImportPayload(parsed, magicImportMode.value);
+    const importResult = await applyMagicImportPayload(parsed, magicImportMode.value);
+    if (importResult.count > 0) {
+      rangeStartInput.value = importResult.firstDay;
+      rangeEndInput.value = importResult.lastDay;
+      selectedDay = importResult.firstDay;
+    }
     saveState();
     renderAll();
-    magicImportStatus.textContent = `Imported ${parsed.activities.length} activities.`;
+    magicImportStatus.textContent = `Imported ${importResult.count} activities.`;
     magicImportStatus.className = "status-text ok";
   } catch (error) {
     magicImportStatus.textContent = `Import failed: ${error.message || "Unknown error"}`;
@@ -1826,7 +1831,7 @@ ${activities.join("\n")}`;
   }
 }
 
-function applyMagicImportPayload(payload, mode = "current") {
+async function applyMagicImportPayload(payload, mode = "current") {
   const tripByName = new Map(state.trips.map((trip) => [trip.name.toLowerCase(), trip]));
   let forcedTrip = null;
   if (mode === "new") {
@@ -1856,11 +1861,14 @@ function applyMagicImportPayload(payload, mode = "current") {
     throw new Error("Import cancelled: a valid year is required for dates without explicit year.");
   }
 
-  activityInputs.forEach((item) => {
+  const importedDays = [];
+  let importedCount = 0;
+  for (const item of activityInputs) {
     const title = String(item?.title || "").trim();
     const day = normalizeImportDay(item?.day, importYear);
     const time = normalizeTimeText(item?.time || "");
-    if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !time) return;
+    if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !time) continue;
+    importedDays.push(day);
     const tripName = String(item?.tripName || "").trim().toLowerCase();
     const trip =
       forcedTrip ||
@@ -1868,6 +1876,7 @@ function applyMagicImportPayload(payload, mode = "current") {
       state.trips.find((t) => t.id === state.currentTripId) ||
       state.trips[0];
     const category = normalizeCategoryEmoji(item?.category);
+    const inferredCoords = await inferImportCoordinates(item, trip?.name || "");
     state.activities.push({
       id: crypto.randomUUID(),
       tripId: trip.id,
@@ -1877,14 +1886,21 @@ function applyMagicImportPayload(payload, mode = "current") {
       category,
       notes: String(item?.notes || "").trim(),
       location: String(item?.location || "").trim(),
-      address: "",
-      lat: null,
-      lng: null,
+      address: String(item?.address || "").trim(),
+      lat: inferredCoords?.lat ?? null,
+      lng: inferredCoords?.lng ?? null,
       taggedMembers: [],
-      pinHidden: false,
+      pinHidden: !inferredCoords,
       createdAt: new Date().toISOString(),
     });
-  });
+    importedCount += 1;
+  }
+  importedDays.sort((a, b) => a.localeCompare(b));
+  return {
+    count: importedCount,
+    firstDay: importedDays[0] || todayIso(),
+    lastDay: importedDays[importedDays.length - 1] || todayIso(),
+  };
 }
 
 function hasExplicitYear(dayValue) {
@@ -1934,6 +1950,49 @@ function normalizeTimeText(value) {
   const hour = Math.max(0, Math.min(23, Number(match[1])));
   const minute = Math.max(0, Math.min(59, Number(match[2])));
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+async function inferImportCoordinates(item, tripName = "") {
+  const location = String(item?.location || "").trim();
+  const address = String(item?.address || "").trim();
+  const title = String(item?.title || "").trim();
+  const placeHints = [location, address, title].filter(Boolean);
+  if (!placeHints.length) return null;
+  for (const hint of placeHints) {
+    const query = buildImportGeocodeQuery(hint, tripName);
+    const coords = await geocodeImportQuery(query);
+    if (coords) return coords;
+  }
+  return null;
+}
+
+function buildImportGeocodeQuery(text, tripName = "") {
+  const base = String(text || "").trim();
+  const lower = `${base} ${tripName}`.toLowerCase();
+  if (lower.includes("madeira")) return base;
+  return `${base}, Madeira, Portugal`;
+}
+
+async function geocodeImportQuery(query) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!Array.isArray(data) || !data.length) return null;
+    const lat = Number(data[0].lat);
+    const lng = Number(data[0].lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat: Number(lat.toFixed(5)), lng: Number(lng.toFixed(5)) };
+  } catch {
+    return null;
+  }
+}
+
+function parseNullableNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }
 
 async function ensureGeminiApiKey() {
