@@ -21,6 +21,7 @@ let syncInFlight = false;
 let syncQueued = false;
 let geminiApiKey = "";
 let supportsLayersCollapsedColumn = true;
+let supportsDeletedColumns = true;
 
 const selectedTripBrand = document.querySelector("#selected-trip-brand");
 const appHeader = document.querySelector(".app-header");
@@ -1432,11 +1433,23 @@ async function syncStateToRemote() {
     lng: Number.isFinite(activity.lng) ? activity.lng : null,
     tagged_members: Array.isArray(activity.taggedMembers) ? activity.taggedMembers : [],
     pin_hidden: Boolean(activity.pinHidden),
-    deleted_at: activity.deletedAt || null,
-    deleted_by: activity.deletedBy || null,
     created_at: activity.createdAt || new Date().toISOString(),
   }));
-  const activitiesWrite = await supabaseClient.from("activities").upsert(activityRows, { onConflict: "id" });
+  if (supportsDeletedColumns) {
+    activityRows.forEach((row, index) => {
+      row.deleted_at = state.activities[index]?.deletedAt || null;
+      row.deleted_by = state.activities[index]?.deletedBy || null;
+    });
+  }
+  let activitiesWrite = await supabaseClient.from("activities").upsert(activityRows, { onConflict: "id" });
+  if (activitiesWrite.error && isMissingDeletedColumnsError(activitiesWrite.error)) {
+    supportsDeletedColumns = false;
+    const fallbackRows = activityRows.map((row) => {
+      const { deleted_at: _deletedAt, deleted_by: _deletedBy, ...rest } = row;
+      return rest;
+    });
+    activitiesWrite = await supabaseClient.from("activities").upsert(fallbackRows, { onConflict: "id" });
+  }
   throwIfSupabaseError(activitiesWrite.error, "saving activities");
 
   const notifRows = state.notifications.map((notification) => ({
@@ -1490,6 +1503,11 @@ function throwIfSupabaseError(error, context) {
 function isMissingLayersCollapsedError(error) {
   const message = String(error?.message || "").toLowerCase();
   return message.includes("layers_collapsed") && message.includes("could not find");
+}
+
+function isMissingDeletedColumnsError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return message.includes("deleted_at") || message.includes("deleted_by");
 }
 
 function setSyncStatus(status) {
