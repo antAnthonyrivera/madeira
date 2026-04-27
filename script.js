@@ -683,7 +683,6 @@ function renderDailyActivities() {
     setPinButton.addEventListener("click", (event) => {
       event.stopPropagation();
       pendingPinActivityId = activity.id;
-      map.setView([32.7607, -16.9595], Math.max(map.getZoom(), 10));
       setActivityLocStatus("Click on the map to set this pin.", "ok");
     });
     const deleteButton = document.createElement("button");
