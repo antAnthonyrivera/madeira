@@ -893,6 +893,7 @@ function renderMapPins() {
   markerByActivityId.clear();
   state.activities.forEach((activity) => {
     if (activity.tripId !== state.currentTripId) return;
+    if (isActivityDeleted(activity)) return;
     if (activity.pinHidden) return;
     if (!Number.isFinite(activity.lat) || !Number.isFinite(activity.lng)) return;
     const marker = L.marker([activity.lat, activity.lng], {
