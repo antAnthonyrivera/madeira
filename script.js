@@ -2026,12 +2026,24 @@ If no trip found, leave tripName empty.
 Text:
 ${text}`;
   try {
-    const raw = await callGemini(prompt, apiKey);
-    const parsed = extractJsonPayload(raw);
-    if (!parsed || !Array.isArray(parsed.activities)) {
-      throw new Error("AI response format invalid.");
+    let payload = null;
+    let usedFallbackParser = false;
+    try {
+      const raw = await callGemini(prompt, apiKey);
+      const parsed = extractJsonPayload(raw);
+      if (!parsed || !Array.isArray(parsed.activities)) {
+        throw new Error("AI response format invalid.");
+      }
+      payload = parsed;
+    } catch (aiError) {
+      const fallbackPayload = buildFallbackImportPayload(text);
+      if (!fallbackPayload.activities.length) {
+        throw aiError;
+      }
+      payload = fallbackPayload;
+      usedFallbackParser = true;
     }
-    const importResult = await applyMagicImportPayload(parsed, magicImportMode.value);
+    const importResult = await applyMagicImportPayload(payload, magicImportMode.value);
     if (importResult.count > 0) {
       rangeStartInput.value = importResult.firstDay;
       rangeEndInput.value = importResult.lastDay;
@@ -2039,12 +2051,97 @@ ${text}`;
     }
     saveState();
     renderAll();
-    magicImportStatus.textContent = `Imported ${importResult.count} activities.`;
+    magicImportStatus.textContent = usedFallbackParser
+      ? `Imported ${importResult.count} activities (AI unavailable, used fallback parser).`
+      : `Imported ${importResult.count} activities.`;
     magicImportStatus.className = "status-text ok";
   } catch (error) {
     magicImportStatus.textContent = `Import failed: ${error.message || "Unknown error"}`;
     magicImportStatus.className = "status-text warn";
   }
+}
+
+function buildFallbackImportPayload(text) {
+  const pieces = String(text || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const currentYear = new Date().getFullYear();
+  const monthMap = {
+    jan: 1,
+    january: 1,
+    feb: 2,
+    february: 2,
+    mar: 3,
+    march: 3,
+    apr: 4,
+    april: 4,
+    may: 5,
+    jun: 6,
+    june: 6,
+    jul: 7,
+    july: 7,
+    aug: 8,
+    august: 8,
+    sep: 9,
+    sept: 9,
+    september: 9,
+    oct: 10,
+    october: 10,
+    nov: 11,
+    november: 11,
+    dec: 12,
+    december: 12,
+  };
+
+  const activities = pieces
+    .map((line) => {
+      const monthDay = line.match(
+        /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*([0-3]?\d)\b/i
+      );
+      if (!monthDay) return null;
+      const monthKey = String(monthDay[1] || "").toLowerCase();
+      const month = monthMap[monthKey];
+      const day = Number(monthDay[2]);
+      if (!month || !day) return null;
+      const normalizedDay = `${currentYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+      const timeMatch = line.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+      const time = timeMatch ? normalizeAmPmTime(timeMatch[1], timeMatch[2], timeMatch[3]) : "09:00";
+
+      const title = line
+        .replace(/\bon\b\s*[A-Za-z]+\s*[0-3]?\d\b/i, "")
+        .replace(/\bat\b\s*\d{1,2}(?::\d{2})?\s*(am|pm)\b/i, "")
+        .trim();
+
+      const lower = line.toLowerCase();
+      const category = lower.includes("breakfast") || lower.includes("lunch") || lower.includes("dinner") ? "🍽️" : "📸";
+
+      return {
+        tripName: "",
+        title: title || line,
+        day: normalizedDay,
+        time: time || "09:00",
+        notes: "",
+        location: "",
+        category,
+      };
+    })
+    .filter(Boolean);
+
+  return { trips: [], activities };
+}
+
+function normalizeAmPmTime(hourPart, minutePart, periodPart) {
+  let hour = Number(hourPart);
+  const minute = Number(minutePart || 0);
+  const period = String(periodPart || "").toLowerCase();
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return "";
+  if (period === "pm" && hour < 12) hour += 12;
+  if (period === "am" && hour === 12) hour = 0;
+  return `${String(Math.max(0, Math.min(23, hour))).padStart(2, "0")}:${String(
+    Math.max(0, Math.min(59, minute))
+  ).padStart(2, "0")}`;
 }
 
 async function runTripIntelligence() {
