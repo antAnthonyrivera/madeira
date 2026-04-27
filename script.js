@@ -22,6 +22,7 @@ let syncQueued = false;
 let geminiApiKey = "";
 let supportsLayersCollapsedColumn = true;
 let supportsDeletedColumns = true;
+const localDeletedActivityMetaById = new Map();
 let selectedWeatherLocationKey = "madeira";
 let deviceWeatherCoords = null;
 
@@ -370,6 +371,9 @@ function setupHandlers() {
   activityForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const existing = editingActivityId ? state.activities.find((item) => item.id === editingActivityId) : null;
+    const nextLat = Number.isFinite(Number(fields.lat.value)) ? Number(fields.lat.value) : null;
+    const nextLng = Number.isFinite(Number(fields.lng.value)) ? Number(fields.lng.value) : null;
+    const hasCoordinates = Number.isFinite(nextLat) && Number.isFinite(nextLng);
     const activity = {
       id: existing?.id || crypto.randomUUID(),
       tripId: existing?.tripId || state.currentTripId,
@@ -380,10 +384,10 @@ function setupHandlers() {
       notes: fields.notes.value.trim(),
       location: fields.location.value.trim(),
       address: fields.address.value.trim(),
-      lat: Number.isFinite(Number(fields.lat.value)) ? Number(fields.lat.value) : null,
-      lng: Number.isFinite(Number(fields.lng.value)) ? Number(fields.lng.value) : null,
+      lat: nextLat,
+      lng: nextLng,
       taggedMembers: selectedTaggedMembers(),
-      pinHidden: existing ? Boolean(existing.pinHidden) : false,
+      pinHidden: hasCoordinates ? false : existing ? Boolean(existing.pinHidden) : false,
       createdAt: existing?.createdAt || new Date().toISOString(),
     };
     if (!activity.title || !activity.day || !activity.time) return;
@@ -715,6 +719,10 @@ function deleteActivityForTrip(activityId) {
   if (!confirmed) return;
   activity.deletedAt = new Date().toISOString();
   activity.deletedBy = state.currentUserName || "Someone";
+  localDeletedActivityMetaById.set(activity.id, {
+    deletedAt: activity.deletedAt,
+    deletedBy: activity.deletedBy,
+  });
   activity.pinHidden = true;
   createActivityDeletedNotifications(activity);
   saveState();
@@ -1422,6 +1430,9 @@ async function refreshStateFromRemote() {
       return acc;
     }, {}),
     activities: (activitiesRes.data || []).map((row) => ({
+      ...(localDeletedActivityMetaById.has(row.id)
+        ? localDeletedActivityMetaById.get(row.id)
+        : {}),
       id: row.id,
       tripId: row.trip_id || currentTripId,
       title: row.title || "",
@@ -1435,8 +1446,8 @@ async function refreshStateFromRemote() {
       lng: parseNullableNumber(row.lng),
       taggedMembers: Array.isArray(row.tagged_members) ? row.tagged_members : [],
       pinHidden: Boolean(row.pin_hidden),
-      deletedAt: row.deleted_at || null,
-      deletedBy: row.deleted_by || "",
+      deletedAt: row.deleted_at || localDeletedActivityMetaById.get(row.id)?.deletedAt || null,
+      deletedBy: row.deleted_by || localDeletedActivityMetaById.get(row.id)?.deletedBy || "",
       createdAt: row.created_at || new Date().toISOString(),
     })),
     notifications: (notificationsRes.data || []).map((row) => ({
