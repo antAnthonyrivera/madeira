@@ -652,10 +652,34 @@ function renderDailyActivities() {
     confidence.textContent = `Weather confidence: ${weatherConfidenceLabel(activityWeather)}`;
     const actions = document.createElement("div");
     actions.className = "activity-row-actions";
+    const zoomPinButton = document.createElement("button");
+    zoomPinButton.type = "button";
+    zoomPinButton.className = "icon-btn";
+    zoomPinButton.title = "Zoom to pin";
+    zoomPinButton.setAttribute("aria-label", "Zoom to map pin");
+    zoomPinButton.innerHTML = `
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M11 4a7 7 0 1 0 0 14a7 7 0 0 0 0-14Zm0 0v3m0 8v3m-7-7h3m8 0h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    `;
+    zoomPinButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (Number.isFinite(activity.lat) && Number.isFinite(activity.lng)) {
+        openActivityPopup(activity);
+        return;
+      }
+      setActivityLocStatus("This activity has no pin yet. Use the pin icon to place one.", "warn");
+    });
     const setPinButton = document.createElement("button");
     setPinButton.type = "button";
     setPinButton.className = "icon-btn";
-    setPinButton.textContent = "Set Pin";
+    setPinButton.title = "Set pin";
+    setPinButton.setAttribute("aria-label", "Set map pin");
+    setPinButton.innerHTML = `
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M12 21s6-5.7 6-10a6 6 0 1 0-12 0c0 4.3 6 10 6 10Zm0-7a3 3 0 1 0 0-6a3 3 0 0 0 0 6Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    `;
     setPinButton.addEventListener("click", (event) => {
       event.stopPropagation();
       pendingPinActivityId = activity.id;
@@ -665,12 +689,18 @@ function renderDailyActivities() {
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.className = "icon-btn danger";
-    deleteButton.textContent = "Delete";
+    deleteButton.title = "Delete activity";
+    deleteButton.setAttribute("aria-label", "Delete activity");
+    deleteButton.innerHTML = `
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M4 7h16M9 7V5h6v2m-7 0l1 12h6l1-12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
     deleteButton.addEventListener("click", (event) => {
       event.stopPropagation();
       deleteActivityForTrip(activity.id);
     });
-    actions.append(setPinButton, deleteButton);
+    actions.append(zoomPinButton, setPinButton, deleteButton);
     card.addEventListener("click", () => {
       openActivityModalForEdit(activity.id);
     });
@@ -2339,18 +2369,26 @@ async function inferImportCoordinates(item, tripName = "") {
   const placeHints = [location, address, title].filter(Boolean);
   if (!placeHints.length) return null;
   for (const hint of placeHints) {
-    const query = buildImportGeocodeQuery(hint, tripName);
-    const coords = await geocodeImportQuery(query);
-    if (coords) return coords;
+    const queries = buildImportGeocodeQueries(hint, tripName);
+    for (const query of queries) {
+      const coords = await geocodeImportQuery(query);
+      if (coords) return coords;
+    }
   }
   return null;
 }
 
-function buildImportGeocodeQuery(text, tripName = "") {
+function buildImportGeocodeQueries(text, tripName = "") {
   const base = String(text || "").trim();
+  if (!base) return [];
+  const queries = [base];
+  if (tripName) queries.push(`${base}, ${tripName}`);
   const lower = `${base} ${tripName}`.toLowerCase();
-  if (lower.includes("madeira")) return base;
-  return `${base}, Madeira, Portugal`;
+  // Madeira hint remains useful, but no longer forced for every import.
+  if (lower.includes("madeira") || lower.includes("funchal") || lower.includes("porto moniz")) {
+    queries.push(`${base}, Madeira, Portugal`);
+  }
+  return [...new Set(queries)];
 }
 
 async function geocodeImportQuery(query) {

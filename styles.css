@@ -815,7 +815,11 @@ button.small {
   background: #f8fbff;
   color: #123b80;
   border-radius: 6px;
-  padding: 0.18rem 0.42rem;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
   cursor: pointer;
 }
 
