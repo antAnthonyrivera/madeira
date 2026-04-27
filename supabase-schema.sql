@@ -40,6 +40,8 @@ alter table public.activities add column if not exists category text default 'ðŸ
 alter table public.activities add column if not exists address text;
 alter table public.activities add column if not exists tagged_members jsonb not null default '[]'::jsonb;
 alter table public.activities add column if not exists pin_hidden boolean not null default false;
+alter table public.activities add column if not exists deleted_at timestamptz;
+alter table public.activities add column if not exists deleted_by text;
 
 create table if not exists public.comments (
   id uuid primary key default gen_random_uuid(),

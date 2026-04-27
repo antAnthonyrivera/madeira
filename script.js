@@ -88,6 +88,7 @@ const WMS_PRESET_PROVIDERS = {
 };
 
 const openActivityModalButton = document.querySelector("#open-activity-modal");
+const openTimelineModalButton = document.querySelector("#open-timeline-modal");
 const activityModal = document.querySelector("#activity-modal");
 const activityModalTitle = document.querySelector("#activity-modal-title");
 const closeActivityModalButton = document.querySelector("#close-activity-modal");
@@ -109,6 +110,11 @@ const tripIntelligenceModal = document.querySelector("#trip-intelligence-modal")
 const closeTripIntelligenceModalButton = document.querySelector("#close-trip-intelligence-modal");
 const runTripIntelligenceButton = document.querySelector("#run-trip-intelligence");
 const tripIntelligenceOutput = document.querySelector("#trip-intelligence-output");
+const timelineModal = document.querySelector("#timeline-modal");
+const closeTimelineModalButton = document.querySelector("#close-timeline-modal");
+const timelineDateRangeLabel = document.querySelector("#timeline-date-range-label");
+const timelineChartHost = document.querySelector("#timeline-chart-host");
+const timelineEventsHost = document.querySelector("#timeline-events-host");
 
 const fields = {
   title: document.querySelector("#activity-title"),
@@ -316,6 +322,16 @@ function setupHandlers() {
     saveActivityButton.textContent = "Create Activity";
     activityModal.classList.remove("hidden");
   });
+  openTimelineModalButton.addEventListener("click", () => {
+    renderTimelineModal();
+    timelineModal.classList.remove("hidden");
+  });
+  closeTimelineModalButton.addEventListener("click", () => {
+    timelineModal.classList.add("hidden");
+  });
+  timelineModal.addEventListener("click", (event) => {
+    if (event.target === timelineModal) timelineModal.classList.add("hidden");
+  });
   closeActivityModalButton.addEventListener("click", () => {
     activityModal.classList.add("hidden");
     editingActivityId = null;
@@ -378,6 +394,9 @@ function renderAll() {
   renderActiveLayersPanel();
   renderDailyActivities();
   updateWeatherForecast();
+  if (!timelineModal.classList.contains("hidden")) {
+    renderTimelineModal();
+  }
 }
 
 function closeAllDropdowns() {
@@ -408,6 +427,7 @@ function getRangeActivities() {
   const high = start <= end ? end : start;
   return state.activities
     .filter((activity) => activity.tripId === state.currentTripId)
+    .filter((activity) => !isActivityDeleted(activity))
     .filter((activity) => {
       const day = normalizeDayForSort(activity.day);
       return day >= low && day <= high;
@@ -616,13 +636,110 @@ function renderDailyActivities() {
       map.setView([32.7607, -16.9595], Math.max(map.getZoom(), 10));
       setActivityLocStatus("Click on the map to set this pin.", "ok");
     });
-    actions.append(setPinButton);
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "icon-btn danger";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteActivityForTrip(activity.id);
+    });
+    actions.append(setPinButton, deleteButton);
     card.addEventListener("click", () => {
       openActivityModalForEdit(activity.id);
     });
     card.append(accentStrip, heading, meta, notes, tags, confidence, actions);
     dailyActivityList.appendChild(card);
   });
+}
+
+function deleteActivityForTrip(activityId) {
+  const activity = state.activities.find((item) => item.id === activityId);
+  if (!activity || isActivityDeleted(activity)) return;
+  const confirmed = window.confirm(`Delete "${activity.title}" for everyone in this trip?`);
+  if (!confirmed) return;
+  activity.deletedAt = new Date().toISOString();
+  activity.deletedBy = state.currentUserName || "Someone";
+  activity.pinHidden = true;
+  createActivityDeletedNotifications(activity);
+  saveState();
+  renderAll();
+}
+
+function renderTimelineModal() {
+  const activities = getRangeActivities().sort(compareActivitiesByDayThenTime);
+  const start = normalizeDayForSort(rangeStartInput.value || selectedDay);
+  const end = normalizeDayForSort(rangeEndInput.value || selectedDay);
+  timelineDateRangeLabel.textContent = `Range: ${formatDayDisplay(start)} to ${formatDayDisplay(end)}`;
+  if (!activities.length) {
+    timelineChartHost.innerHTML = `<p class="meta">No activities in selected range.</p>`;
+    timelineEventsHost.innerHTML = `<p class="empty">No activities to visualize.</p>`;
+    return;
+  }
+  timelineChartHost.innerHTML = buildTimelineChartSvg(activities);
+  timelineEventsHost.innerHTML = buildTimelineDayRows(activities);
+}
+
+function buildTimelineChartSvg(activities) {
+  const width = Math.max(920, activities.length * 145);
+  const height = 150;
+  const left = 40;
+  const right = width - 40;
+  const centerY = 70;
+  const step = activities.length > 1 ? (right - left) / (activities.length - 1) : 0;
+  const circles = activities
+    .map((activity, index) => {
+      const x = left + step * index;
+      const label = truncateLabel(activity.title, 18);
+      const top = escapeHtml(`${activity.time} • ${label}`);
+      return `
+        <circle class="timeline-node" cx="${x}" cy="${centerY}" r="5"></circle>
+        <text class="timeline-node-label" x="${x}" y="${centerY - 14}" text-anchor="middle">${top}</text>
+      `;
+    })
+    .join("");
+  return `
+    <svg class="timeline-chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Activity timeline">
+      <line class="timeline-axis" x1="${left}" y1="${centerY}" x2="${right}" y2="${centerY}"></line>
+      ${circles}
+    </svg>
+  `;
+}
+
+function buildTimelineDayRows(activities) {
+  const byDay = new Map();
+  activities.forEach((activity) => {
+    const day = normalizeDayForSort(activity.day);
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(activity);
+  });
+  return [...byDay.entries()]
+    .map(([day, dayActivities]) => {
+      const cards = dayActivities
+        .map(
+          (activity) => `
+          <article class="timeline-event-card">
+            <p><strong>${escapeHtml(activity.title)}</strong></p>
+            <p class="meta">${escapeHtml(activity.time)}${activity.location ? ` • ${escapeHtml(activity.location)}` : ""}</p>
+            <p class="meta">${escapeHtml(activity.notes || "No details")}</p>
+          </article>
+        `
+        )
+        .join("");
+      return `
+        <section class="timeline-day-row">
+          <div class="timeline-day-heading">${escapeHtml(formatDayDisplay(day))}</div>
+          <div class="timeline-day-grid">${cards}</div>
+        </section>
+      `;
+    })
+    .join("");
+}
+
+function truncateLabel(text, max = 18) {
+  const value = String(text || "");
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 3)}...`;
 }
 
 function renderNotifications() {
@@ -647,16 +764,19 @@ function renderNotifications() {
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     .forEach((notification) => {
       const activity = state.activities.find((item) => item.id === notification.activityId);
+      const isDeletionNotice = String(notification.fromUser || "").startsWith("Deleted activity:");
       const card = document.createElement("div");
       card.className = "notification-card";
       const message = document.createElement("p");
-      message.textContent = `${notification.userName} was tagged on ${activity ? activity.title : "an activity"}.`;
+      message.textContent = isDeletionNotice
+        ? notification.fromUser
+        : `${notification.userName} was tagged on ${activity ? activity.title : "an activity"}.`;
       const jumpButton = document.createElement("button");
       jumpButton.type = "button";
       jumpButton.className = "notif-link";
       jumpButton.textContent = "Go to activity";
       jumpButton.addEventListener("click", () => {
-        if (!activity) return;
+        if (!activity || isActivityDeleted(activity)) return;
         selectedDay = activity.day;
         rangeStartInput.value = activity.day;
         rangeEndInput.value = activity.day;
@@ -668,6 +788,10 @@ function renderNotifications() {
         focusActivityCard(activity.id);
         openActivityPopup(activity);
       });
+      if (isDeletionNotice || !activity || isActivityDeleted(activity)) {
+        jumpButton.disabled = true;
+        jumpButton.title = "Activity was deleted";
+      }
       const button = document.createElement("button");
       button.className = "small";
       button.textContent = "Mark addressed";
@@ -1044,6 +1168,20 @@ function createTagNotifications(activity, previousTags = new Set()) {
   });
 }
 
+function createActivityDeletedNotifications(activity) {
+  getCurrentTripMembers().forEach((userName) => {
+    state.notifications.push({
+      id: crypto.randomUUID(),
+      userName,
+      fromUser: `Deleted activity: ${activity.title} (${formatDayDisplay(activity.day)} ${activity.time})`,
+      activityId: activity.id,
+      tripId: activity.tripId,
+      handled: false,
+      createdAt: new Date().toISOString(),
+    });
+  });
+}
+
 function getUnhandledNotificationsForCurrentTrip() {
   const currentTripActivityIds = new Set(
     state.activities.filter((activity) => activity.tripId === state.currentTripId).map((activity) => activity.id)
@@ -1240,6 +1378,8 @@ async function refreshStateFromRemote() {
       lng: parseNullableNumber(row.lng),
       taggedMembers: Array.isArray(row.tagged_members) ? row.tagged_members : [],
       pinHidden: Boolean(row.pin_hidden),
+      deletedAt: row.deleted_at || null,
+      deletedBy: row.deleted_by || "",
       createdAt: row.created_at || new Date().toISOString(),
     })),
     notifications: (notificationsRes.data || []).map((row) => ({
@@ -1292,6 +1432,8 @@ async function syncStateToRemote() {
     lng: Number.isFinite(activity.lng) ? activity.lng : null,
     tagged_members: Array.isArray(activity.taggedMembers) ? activity.taggedMembers : [],
     pin_hidden: Boolean(activity.pinHidden),
+    deleted_at: activity.deletedAt || null,
+    deleted_by: activity.deletedBy || null,
     created_at: activity.createdAt || new Date().toISOString(),
   }));
   const activitiesWrite = await supabaseClient.from("activities").upsert(activityRows, { onConflict: "id" });
@@ -2029,6 +2171,10 @@ function parseNullableNumber(value) {
   if (value === null || value === undefined || value === "") return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function isActivityDeleted(activity) {
+  return Boolean(activity?.deletedAt);
 }
 
 async function ensureGeminiApiKey() {

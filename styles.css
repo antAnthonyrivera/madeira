@@ -604,6 +604,84 @@ button.small {
   background: #f8fafc;
 }
 
+.icon-with-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.timeline-modal-card {
+  width: min(1200px, 96vw);
+  max-height: 94vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  padding: 1rem;
+}
+
+.timeline-chart-host {
+  margin-top: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.7rem;
+  overflow-x: auto;
+}
+
+.timeline-chart-svg {
+  min-width: 920px;
+  height: 150px;
+}
+
+.timeline-axis {
+  stroke: #94a3b8;
+  stroke-width: 2;
+}
+
+.timeline-node {
+  fill: #2563eb;
+}
+
+.timeline-node-label {
+  fill: #0f172a;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.timeline-events-host {
+  margin-top: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.timeline-day-row {
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  padding: 0.65rem;
+  background: #f8fbff;
+}
+
+.timeline-day-heading {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.timeline-day-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.55rem;
+}
+
+.timeline-event-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.45rem 0.55rem;
+}
+
 .trip-row {
   display: flex;
   justify-content: space-between;

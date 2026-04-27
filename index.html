@@ -130,6 +130,12 @@
           <div class="row between section-header">
             <h3 id="activities-title">Activities (0)</h3>
             <div class="row right-actions">
+              <button id="open-timeline-modal" type="button" class="small icon-with-label" aria-label="Open timeline view">
+                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                  <path d="M3 12h18M7 7v10M12 5v14M17 8v8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                Timeline
+              </button>
               <button id="open-activity-modal" type="button" class="small">+ Add</button>
             </div>
           </div>
@@ -280,6 +286,18 @@
             <p class="meta">Click "Generate Summary" to analyze this trip.</p>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div id="timeline-modal" class="modal-overlay hidden">
+      <div class="timeline-modal-card">
+        <div class="row between tight-bottom">
+          <h2>Activity Timeline</h2>
+          <button id="close-timeline-modal" type="button" class="danger small">Close</button>
+        </div>
+        <p id="timeline-date-range-label" class="meta"></p>
+        <div id="timeline-chart-host" class="timeline-chart-host"></div>
+        <div id="timeline-events-host" class="timeline-events-host"></div>
       </div>
     </div>
 
