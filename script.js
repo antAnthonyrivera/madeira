@@ -22,6 +22,8 @@ let syncQueued = false;
 let geminiApiKey = "";
 let supportsLayersCollapsedColumn = true;
 let supportsDeletedColumns = true;
+let selectedWeatherLocationKey = "madeira";
+let deviceWeatherCoords = null;
 
 const selectedTripBrand = document.querySelector("#selected-trip-brand");
 const appHeader = document.querySelector(".app-header");
@@ -36,6 +38,9 @@ const rangeStartInput = document.querySelector("#range-start");
 const rangeEndInput = document.querySelector("#range-end");
 const weatherForecast = document.querySelector("#weather-forecast");
 const mapWeatherBadge = document.querySelector("#map-weather-badge");
+const weatherLocationSelect = document.querySelector("#weather-location-select");
+const weatherUseDeviceButton = document.querySelector("#weather-use-device");
+const weatherLocationStatus = document.querySelector("#weather-location-status");
 const dailyActivityList = document.querySelector("#daily-activity-list");
 const activitiesTitle = document.querySelector("#activities-title");
 const notificationFilter = document.querySelector("#notification-filter");
@@ -88,6 +93,13 @@ const WMS_PRESET_PROVIDERS = {
   },
 };
 
+const WEATHER_LOCATIONS = {
+  madeira: { label: "Madeira", latitude: 32.6669, longitude: -16.9241 },
+  lisbon: { label: "Lisbon", latitude: 38.7223, longitude: -9.1393 },
+  austin: { label: "Austin", latitude: 30.2672, longitude: -97.7431 },
+  porto: { label: "Porto", latitude: 41.1579, longitude: -8.6291 },
+};
+
 const openActivityModalButton = document.querySelector("#open-activity-modal");
 const openTimelineModalButton = document.querySelector("#open-timeline-modal");
 const activityModal = document.querySelector("#activity-modal");
@@ -135,6 +147,7 @@ async function init() {
   setupMap();
   setupHandlers();
   updateHeaderOffsetVar();
+  weatherLocationSelect.value = selectedWeatherLocationKey;
   if (DEFAULT_WMS_URL) {
     wmsUrlInput.value = DEFAULT_WMS_URL;
   }
@@ -218,6 +231,18 @@ function setupHandlers() {
   weatherDropdownToggle.addEventListener("click", (event) => {
     event.stopPropagation();
     toggleDropdown("weather");
+  });
+  weatherLocationSelect.addEventListener("change", async () => {
+    selectedWeatherLocationKey = weatherLocationSelect.value || "madeira";
+    if (selectedWeatherLocationKey === "device" && !deviceWeatherCoords) {
+      await setWeatherLocationFromDevice(true);
+      return;
+    }
+    setWeatherLocationStatus("", "");
+    updateWeatherForecast();
+  });
+  weatherUseDeviceButton.addEventListener("click", async () => {
+    await setWeatherLocationFromDevice(true);
   });
   rangeDropdownToggle.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -1557,6 +1582,13 @@ function setupRealtimeSubscriptions() {
 }
 
 async function updateWeatherForecast() {
+  const weatherPoint = getSelectedWeatherPoint();
+  if (!weatherPoint) {
+    selectedDayWeather = null;
+    weatherForecast.innerHTML = `<p class="meta">Select a weather location first.</p>`;
+    mapWeatherBadge.textContent = "Weather: --";
+    return;
+  }
   if (!selectedDay || !/^\d{4}-\d{2}-\d{2}$/.test(String(selectedDay))) {
     selectedDayWeather = null;
     weatherForecast.innerHTML = `<p class="meta">Pick a valid date (YYYY-MM-DD) to load weather forecast.</p>`;
@@ -1586,8 +1618,8 @@ async function updateWeatherForecast() {
   mapWeatherBadge.textContent = "Weather: loading...";
   try {
     const params = new URLSearchParams({
-      latitude: "32.6669",
-      longitude: "-16.9241",
+      latitude: String(weatherPoint.latitude),
+      longitude: String(weatherPoint.longitude),
       daily:
         "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,cloud_cover_mean",
       hourly: "weather_code,precipitation_probability,cloud_cover,wind_gusts_10m,temperature_2m",
@@ -1627,12 +1659,13 @@ async function updateWeatherForecast() {
       },
     };
     weatherForecast.innerHTML = `
+      <p class="meta">${escapeHtml(weatherPoint.label)}</p>
       <strong>${summary}</strong>
       <p class="meta">Temp: ${roundOrDash(cToF(tempMin))} to ${roundOrDash(cToF(tempMax))} °F</p>
       <p class="meta">Rain chance: ${roundOrDash(rainProb)}% • Rain: ${roundOrDash(rainSum)} mm</p>
       <p class="meta">Cloud cover: ${roundOrDash(cloud)}% • Gusts: ${roundOrDash(selectedDayWeather.windGust)} km/h</p>
     `;
-    mapWeatherBadge.textContent = `${summary} • ${roundOrDash(cToF(tempMax))}°F`;
+    mapWeatherBadge.textContent = `${weatherPoint.label}: ${summary} • ${roundOrDash(cToF(tempMax))}°F`;
   } catch (error) {
     selectedDayWeather = null;
     weatherForecast.innerHTML = `<p class="meta">Weather unavailable: ${escapeHtml(
@@ -1640,6 +1673,60 @@ async function updateWeatherForecast() {
     )}</p>`;
     mapWeatherBadge.textContent = "Weather: unavailable";
   }
+}
+
+function getSelectedWeatherPoint() {
+  if (selectedWeatherLocationKey === "device") {
+    if (!deviceWeatherCoords) return null;
+    return deviceWeatherCoords;
+  }
+  return WEATHER_LOCATIONS[selectedWeatherLocationKey] || WEATHER_LOCATIONS.madeira;
+}
+
+async function setWeatherLocationFromDevice(switchToDevice = false) {
+  if (!navigator.geolocation) {
+    setWeatherLocationStatus("Geolocation is not supported in this browser.", "warn");
+    return;
+  }
+  setWeatherLocationStatus("Locating device...", "");
+  try {
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 12000 });
+    });
+    const latitude = Number(position.coords.latitude);
+    const longitude = Number(position.coords.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new Error("Invalid coordinates from device.");
+    }
+    deviceWeatherCoords = {
+      label: "My location",
+      latitude: Number(latitude.toFixed(4)),
+      longitude: Number(longitude.toFixed(4)),
+    };
+    if (switchToDevice) {
+      selectedWeatherLocationKey = "device";
+      weatherLocationSelect.value = "device";
+    }
+    setWeatherLocationStatus(
+      `Using device location (${deviceWeatherCoords.latitude}, ${deviceWeatherCoords.longitude}).`,
+      "ok"
+    );
+    updateWeatherForecast();
+  } catch (error) {
+    const message =
+      error?.code === 1
+        ? "Location permission denied."
+        : error?.code === 3
+          ? "Location request timed out."
+          : "Unable to get device location.";
+    setWeatherLocationStatus(message, "warn");
+  }
+}
+
+function setWeatherLocationStatus(message, stateClass) {
+  weatherLocationStatus.textContent = message;
+  weatherLocationStatus.className = "status-text";
+  if (stateClass) weatherLocationStatus.classList.add(stateClass);
 }
 
 function openDayPicker() {

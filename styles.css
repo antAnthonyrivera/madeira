@@ -265,6 +265,10 @@ h2 {
   margin-bottom: 0.2rem;
 }
 
+.weather-location-controls {
+  margin-bottom: 0.55rem;
+}
+
 .weather-strip {
   height: 6px;
   border-radius: 999px;

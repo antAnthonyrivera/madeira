@@ -64,6 +64,18 @@
             </button>
             <div id="weather-dropdown" class="dropdown-panel hidden">
               <h3>Weather Details</h3>
+              <div class="stack weather-location-controls">
+                <label for="weather-location-select">Location</label>
+                <select id="weather-location-select">
+                  <option value="madeira">Madeira</option>
+                  <option value="lisbon">Lisbon</option>
+                  <option value="austin">Austin</option>
+                  <option value="porto">Porto</option>
+                  <option value="device">Use device location</option>
+                </select>
+                <button id="weather-use-device" type="button" class="small">Use device location now</button>
+                <p id="weather-location-status" class="status-text"></p>
+              </div>
               <div id="weather-forecast" class="weather-box">
                 <p class="meta">Weather forecast loading...</p>
               </div>
