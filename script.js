@@ -830,7 +830,8 @@ function renderNotifications() {
       jumpButton.type = "button";
       jumpButton.className = "notif-link";
       jumpButton.textContent = "Go to activity";
-      jumpButton.addEventListener("click", () => {
+      jumpButton.addEventListener("click", (event) => {
+        event.stopPropagation();
         if (!activity || isActivityDeleted(activity)) return;
         selectedDay = activity.day;
         rangeStartInput.value = activity.day;
@@ -850,7 +851,8 @@ function renderNotifications() {
       const button = document.createElement("button");
       button.className = "small";
       button.textContent = "Mark addressed";
-      button.addEventListener("click", () => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
         notification.handled = true;
         saveState();
         renderNotifications();
