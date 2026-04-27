@@ -2261,11 +2261,7 @@ async function applyMagicImportPayload(payload, mode = "current") {
     });
   }
   const activityInputs = Array.isArray(payload.activities) ? payload.activities : [];
-  const needsYear = activityInputs.some((item) => !hasExplicitYear(item?.day));
-  const importYear = needsYear ? promptForImportYear() : null;
-  if (needsYear && !importYear) {
-    throw new Error("Import cancelled: a valid year is required for dates without explicit year.");
-  }
+  const importYear = String(new Date().getFullYear());
 
   const importedDays = [];
   let importedCount = 0;
