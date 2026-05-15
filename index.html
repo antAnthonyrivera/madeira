@@ -11,7 +11,7 @@
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
       crossorigin=""
     />
-    <link rel="stylesheet" href="./styles.css?v=20260514" />
+    <link rel="stylesheet" href="./styles.css?v=20260514c" />
   </head>
   <body>
     <header class="app-header">
@@ -141,6 +141,18 @@
         <div class="map-wrap">
           <div id="map"></div>
           <div id="map-weather-badge" class="map-weather-badge">Weather: --</div>
+          <div class="map-route-panel" id="map-route-panel">
+            <div class="map-route-panel-title">Day route</div>
+            <label class="map-route-checkbox">
+              <input type="checkbox" id="route-animation-toggle" />
+              <span>Animate route on map</span>
+            </label>
+            <div class="map-route-day-row">
+              <label for="route-animation-day">Route day</label>
+              <input type="date" id="route-animation-day" />
+            </div>
+            <p id="route-animation-hint" class="map-route-hint" aria-live="polite"></p>
+          </div>
         </div>
       </section>
 
@@ -338,6 +350,6 @@
       crossorigin=""
     ></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./script.js?v=20260514"></script>
+    <script src="./script.js?v=20260514c"></script>
   </body>
 </html>

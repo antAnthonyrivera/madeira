@@ -217,6 +217,72 @@ h2 {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
+.map-route-panel {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 900;
+  max-width: min(280px, calc(100% - 20px));
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.55rem 0.65rem 0.5rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  font-size: 0.82rem;
+}
+
+.map-route-panel-title {
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+  margin-bottom: 0.35rem;
+}
+
+.map-route-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.map-route-checkbox input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #7c3aed;
+}
+
+.map-route-day-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.45rem;
+}
+
+.map-route-day-row label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.map-route-day-row input[type="date"] {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  padding: 0.25rem 0.35rem;
+  font-size: 0.8rem;
+}
+
+.map-route-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #64748b;
+}
+
 .stack {
   display: grid;
   gap: 0.55rem;
@@ -707,6 +773,16 @@ button.small {
 .trip-meta-btn {
   font-size: 0.72rem;
   padding: 0.2rem 0.45rem;
+}
+
+.trip-delete-btn {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.trip-delete-btn:hover {
+  background: #fecaca;
 }
 
 .roster-hint {

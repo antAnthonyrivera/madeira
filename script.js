@@ -11,6 +11,9 @@ const DEFAULT_TRIP = {
 };
 const DEFAULT_WMS_URL = "";
 
+const ROUTE_ANIM_GRADIENT_STEPS = 40;
+const ROUTE_ANIM_DURATION_MS = 16000;
+
 let map = null;
 let selectedDay = "";
 let selectedDayWeather = null;
@@ -149,6 +152,19 @@ const activityPanelSelection = new Set();
 const timelineActivitySelection = new Set();
 let lastActivityPanelTripId = "";
 
+let routeAnimationLayerGroup = null;
+let routeAnimationHeadMarker = null;
+let routeAnimationRafId = null;
+let routeAnimationT0 = 0;
+let routeAnimationSampleLatLngs = [];
+let routeAnimationSegmentLens = [];
+let routeAnimationTotalLen = 0;
+let routeAnimationMinM = 0;
+let routeAnimationMaxM = 24 * 60;
+
+const routeAnimationToggle = document.querySelector("#route-animation-toggle");
+const routeAnimationDayInput = document.querySelector("#route-animation-day");
+
 const fields = {
   title: document.querySelector("#activity-title"),
   day: document.querySelector("#activity-day"),
@@ -180,11 +196,15 @@ async function init() {
   setupRealtimeSubscriptions();
   setSyncStatus("saved");
   updateWeatherForecast();
+  if (routeAnimationDayInput) {
+    routeAnimationDayInput.value = selectedDay;
+  }
   renderAll();
 }
 
 function setupMap() {
   map = L.map("map").setView([32.7607, -16.9595], 10);
+  ensureRouteAnimationPanes();
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution: "&copy; OpenStreetMap contributors",
@@ -231,6 +251,17 @@ function setupHandlers() {
     renderDailyActivities();
     closeAllDropdowns();
   });
+
+  if (routeAnimationToggle) {
+    routeAnimationToggle.addEventListener("change", () => {
+      renderAll();
+    });
+  }
+  if (routeAnimationDayInput) {
+    routeAnimationDayInput.addEventListener("change", () => {
+      renderAll();
+    });
+  }
 
   notificationFilter.addEventListener("change", () => {
     renderNotifications();
@@ -496,6 +527,7 @@ function renderAll() {
   renderCurrentUserOptions();
   renderLayersSectionState();
   renderNotifications();
+  syncRouteAnimationLayer();
   renderMapPins();
   renderActiveLayersPanel();
   renderDailyActivities();
@@ -658,6 +690,43 @@ function unarchiveTripById(tripId) {
   renderAll();
 }
 
+function permanentlyDeleteArchivedTripById(tripId) {
+  const trip = state.trips.find((t) => t.id === tripId);
+  if (!trip || !isTripArchived(trip) || !isCurrentUserAuthorOfTrip(trip)) return;
+  if (state.trips.length <= 1) {
+    window.alert("You cannot delete the only trip.");
+    return;
+  }
+  const tripActivities = state.activities.filter((a) => a.tripId === tripId);
+  const activityCount = tripActivities.length;
+  const detail = activityCount
+    ? ` This will permanently remove ${activityCount} activit${activityCount === 1 ? "y" : "ies"} and related data for everyone.`
+    : "";
+  if (
+    !window.confirm(
+      `Permanently delete archived trip "${trip.name}"?${detail}\n\nThis cannot be undone.`
+    )
+  ) {
+    return;
+  }
+  const wasCurrent = state.currentTripId === tripId;
+  tripActivities.forEach((activity) => {
+    activityPanelSelection.delete(activity.id);
+    timelineActivitySelection.delete(activity.id);
+    localDeletedActivityMetaById.delete(activity.id);
+  });
+  state.activities = state.activities.filter((a) => a.tripId !== tripId);
+  state.notifications = state.notifications.filter((n) => n.tripId !== tripId);
+  delete state.tripMembersByTripId[tripId];
+  state.trips = state.trips.filter((t) => t.id !== tripId);
+  if (wasCurrent || !state.trips.some((t) => t.id === state.currentTripId)) {
+    state.currentTripId =
+      state.trips.find((t) => !isTripArchived(t))?.id || state.trips[0]?.id || state.currentTripId;
+  }
+  saveState();
+  renderAll();
+}
+
 function updateActivityBulkToolbarUi() {
   if (!activityBulkToolbar || !activitySelectionCountLabel) return;
   const n = activityPanelSelection.size;
@@ -744,6 +813,16 @@ function renderTripList() {
         unarchiveTripById(trip.id);
       });
       actions.appendChild(unarchiveBtn);
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "small trip-meta-btn trip-delete-btn";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.title = "Permanently delete this archived trip";
+      deleteBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        permanentlyDeleteArchivedTripById(trip.id);
+      });
+      actions.appendChild(deleteBtn);
     }
 
     row.append(main, actions);
@@ -1221,6 +1300,186 @@ function openActivityPopup(activity) {
   marker.openPopup();
 }
 
+function parseActivityTimeToMinutes(timeStr) {
+  const raw = String(timeStr || "").trim();
+  const match = raw.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return 12 * 60;
+  const hour = Math.min(23, Math.max(0, parseInt(match[1], 10)));
+  const minute = Math.min(59, Math.max(0, parseInt(match[2], 10)));
+  return hour * 60 + minute;
+}
+
+function smoothstep01(t) {
+  const x = Math.max(0, Math.min(1, t));
+  return x * x * (3 - 2 * x);
+}
+
+function colorForMinutesInDaySpan(minutes, minM, maxM) {
+  const span = Math.max(1, maxM - minM);
+  let t = (minutes - minM) / span;
+  t = Math.max(0, Math.min(1, t));
+  const u = smoothstep01(t);
+  const h = 48 + (278 - 48) * u;
+  const s = 96 - 22 * u;
+  const l = 58 - 14 * u;
+  return `hsl(${h.toFixed(1)} ${s.toFixed(0)}% ${l.toFixed(0)}%)`;
+}
+
+function ensureRouteAnimationPanes() {
+  if (!map) return;
+  if (!map.getPane("routeAnimationPoly")) {
+    map.createPane("routeAnimationPoly");
+    map.getPane("routeAnimationPoly").style.zIndex = "450";
+  }
+  if (!map.getPane("routeAnimationHead")) {
+    map.createPane("routeAnimationHead");
+    map.getPane("routeAnimationHead").style.zIndex = "580";
+  }
+}
+
+function clearRouteAnimationVisuals() {
+  if (routeAnimationRafId !== null) {
+    cancelAnimationFrame(routeAnimationRafId);
+    routeAnimationRafId = null;
+  }
+  if (routeAnimationLayerGroup && map) {
+    map.removeLayer(routeAnimationLayerGroup);
+    routeAnimationLayerGroup = null;
+  }
+  if (routeAnimationHeadMarker && map) {
+    map.removeLayer(routeAnimationHeadMarker);
+    routeAnimationHeadMarker = null;
+  }
+  routeAnimationSampleLatLngs = [];
+  routeAnimationSegmentLens = [];
+  routeAnimationTotalLen = 0;
+}
+
+function latLngAtCumulativeDistance(points, segLens, targetDist) {
+  if (!points.length) return null;
+  const maxDist = segLens.reduce((a, b) => a + b, 0);
+  let d = Math.max(0, Math.min(targetDist, maxDist - 1e-9));
+  for (let i = 0; i < segLens.length; i += 1) {
+    const seg = segLens[i];
+    if (d <= seg) {
+      const t = seg < 1e-9 ? 0 : d / seg;
+      const a = points[i];
+      const b = points[i + 1];
+      return L.latLng(a.lat + t * (b.lat - a.lat), a.lng + t * (b.lng - a.lng));
+    }
+    d -= seg;
+  }
+  return points[points.length - 1];
+}
+
+function tickRouteAnimation(now) {
+  if (!map || !routeAnimationHeadMarker || !routeAnimationToggle?.checked) return;
+  const elapsed = (now - routeAnimationT0) % ROUTE_ANIM_DURATION_MS;
+  const dist = (elapsed / ROUTE_ANIM_DURATION_MS) * routeAnimationTotalLen * 0.9999;
+  const ll = latLngAtCumulativeDistance(routeAnimationSampleLatLngs, routeAnimationSegmentLens, dist);
+  if (ll) routeAnimationHeadMarker.setLatLng(ll);
+  const prog = routeAnimationTotalLen > 0 ? dist / routeAnimationTotalLen : 0;
+  const mm = routeAnimationMinM + (routeAnimationMaxM - routeAnimationMinM) * prog;
+  routeAnimationHeadMarker.setStyle({
+    fillColor: colorForMinutesInDaySpan(mm, routeAnimationMinM, routeAnimationMaxM),
+  });
+  routeAnimationRafId = requestAnimationFrame(tickRouteAnimation);
+}
+
+function setRouteAnimationHint(text) {
+  const el = document.querySelector("#route-animation-hint");
+  if (el) el.textContent = text || "";
+}
+
+function syncRouteAnimationLayer() {
+  clearRouteAnimationVisuals();
+  if (!map) return;
+  if (!routeAnimationToggle?.checked) {
+    setRouteAnimationHint("");
+    return;
+  }
+  const day = normalizeDayForSort(routeAnimationDayInput?.value || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    setRouteAnimationHint("Choose a route day to draw one day’s path.");
+    return;
+  }
+  const activities = state.activities
+    .filter((a) => a.tripId === state.currentTripId)
+    .filter((a) => !isActivityDeleted(a))
+    .filter((a) => normalizeDayForSort(a.day) === day)
+    .filter((a) => Number.isFinite(a.lat) && Number.isFinite(a.lng) && !a.pinHidden)
+    .sort(compareActivitiesByDayThenTime);
+  if (activities.length < 2) {
+    setRouteAnimationHint("That day needs at least two visible pins (coordinates) to build a route.");
+    return;
+  }
+  const minutesList = activities.map((a) => parseActivityTimeToMinutes(a.time));
+  routeAnimationMinM = Math.min(...minutesList);
+  routeAnimationMaxM = Math.max(...minutesList);
+  ensureRouteAnimationPanes();
+  routeAnimationLayerGroup = L.layerGroup().addTo(map);
+  const steps = ROUTE_ANIM_GRADIENT_STEPS;
+  for (let i = 0; i < activities.length - 1; i += 1) {
+    const a0 = activities[i];
+    const a1 = activities[i + 1];
+    const m0 = minutesList[i];
+    const m1 = minutesList[i + 1];
+    for (let s = 0; s < steps; s += 1) {
+      const u0 = s / steps;
+      const u1 = (s + 1) / steps;
+      const p0 = L.latLng(a0.lat + u0 * (a1.lat - a0.lat), a0.lng + u0 * (a1.lng - a0.lng));
+      const p1 = L.latLng(a0.lat + u1 * (a1.lat - a0.lat), a0.lng + u1 * (a1.lng - a0.lng));
+      const uMid = (u0 + u1) / 2;
+      const mins = m0 + uMid * (m1 - m0);
+      const color = colorForMinutesInDaySpan(mins, routeAnimationMinM, routeAnimationMaxM);
+      L.polyline([p0, p1], {
+        color,
+        weight: 5,
+        opacity: 0.9,
+        lineCap: "round",
+        lineJoin: "round",
+        interactive: false,
+        pane: "routeAnimationPoly",
+      }).addTo(routeAnimationLayerGroup);
+    }
+  }
+  routeAnimationSampleLatLngs = [L.latLng(activities[0].lat, activities[0].lng)];
+  for (let i = 0; i < activities.length - 1; i += 1) {
+    const a0 = activities[i];
+    const a1 = activities[i + 1];
+    for (let s = 1; s <= steps; s += 1) {
+      const u = s / steps;
+      routeAnimationSampleLatLngs.push(L.latLng(a0.lat + u * (a1.lat - a0.lat), a0.lng + u * (a1.lng - a0.lng)));
+    }
+  }
+  routeAnimationSegmentLens = [];
+  routeAnimationTotalLen = 0;
+  for (let i = 1; i < routeAnimationSampleLatLngs.length; i += 1) {
+    const len = map.distance(routeAnimationSampleLatLngs[i - 1], routeAnimationSampleLatLngs[i]);
+    routeAnimationSegmentLens.push(len);
+    routeAnimationTotalLen += len;
+  }
+  if (routeAnimationTotalLen < 1) {
+    setRouteAnimationHint("Route is too short to animate.");
+    clearRouteAnimationVisuals();
+    return;
+  }
+  routeAnimationHeadMarker = L.circleMarker(routeAnimationSampleLatLngs[0], {
+    radius: 8,
+    color: "#ffffff",
+    weight: 2,
+    fillColor: colorForMinutesInDaySpan(routeAnimationMinM, routeAnimationMinM, routeAnimationMaxM),
+    fillOpacity: 0.95,
+    pane: "routeAnimationHead",
+    interactive: false,
+  }).addTo(map);
+  setRouteAnimationHint(
+    `${activities.length} stops • line colors early (gold) → late (purple) by time • pins stay on top`
+  );
+  routeAnimationT0 = performance.now();
+  routeAnimationRafId = requestAnimationFrame(tickRouteAnimation);
+}
+
 function renderMapPins() {
   markerByActivityId.forEach((marker) => marker.remove());
   markerByActivityId.clear();
@@ -1256,6 +1515,9 @@ function renderMapPins() {
       )}<br>${escapeHtml(activity.location || activity.address || "No place name")}`
     );
     markerByActivityId.set(activity.id, marker);
+  });
+  markerByActivityId.forEach((marker) => {
+    if (typeof marker.bringToFront === "function") marker.bringToFront();
   });
 }
 
