@@ -11,8 +11,7 @@ const DEFAULT_TRIP = {
 };
 const DEFAULT_WMS_URL = "";
 
-const ROUTE_ANIM_GRADIENT_STEPS = 40;
-const ROUTE_ANIM_DURATION_MS = 16000;
+const ROUTE_DAY_GRADIENT_STEPS = 40;
 
 let map = null;
 let selectedDay = "";
@@ -153,14 +152,6 @@ const timelineActivitySelection = new Set();
 let lastActivityPanelTripId = "";
 
 let routeAnimationLayerGroup = null;
-let routeAnimationHeadMarker = null;
-let routeAnimationRafId = null;
-let routeAnimationT0 = 0;
-let routeAnimationSampleLatLngs = [];
-let routeAnimationSegmentLens = [];
-let routeAnimationTotalLen = 0;
-let routeAnimationMinM = 0;
-let routeAnimationMaxM = 24 * 60;
 
 const routeAnimationToggle = document.querySelector("#route-animation-toggle");
 const routeAnimationDayInput = document.querySelector("#route-animation-day");
@@ -1331,59 +1322,13 @@ function ensureRouteAnimationPanes() {
     map.createPane("routeAnimationPoly");
     map.getPane("routeAnimationPoly").style.zIndex = "450";
   }
-  if (!map.getPane("routeAnimationHead")) {
-    map.createPane("routeAnimationHead");
-    map.getPane("routeAnimationHead").style.zIndex = "580";
-  }
 }
 
 function clearRouteAnimationVisuals() {
-  if (routeAnimationRafId !== null) {
-    cancelAnimationFrame(routeAnimationRafId);
-    routeAnimationRafId = null;
-  }
   if (routeAnimationLayerGroup && map) {
     map.removeLayer(routeAnimationLayerGroup);
     routeAnimationLayerGroup = null;
   }
-  if (routeAnimationHeadMarker && map) {
-    map.removeLayer(routeAnimationHeadMarker);
-    routeAnimationHeadMarker = null;
-  }
-  routeAnimationSampleLatLngs = [];
-  routeAnimationSegmentLens = [];
-  routeAnimationTotalLen = 0;
-}
-
-function latLngAtCumulativeDistance(points, segLens, targetDist) {
-  if (!points.length) return null;
-  const maxDist = segLens.reduce((a, b) => a + b, 0);
-  let d = Math.max(0, Math.min(targetDist, maxDist - 1e-9));
-  for (let i = 0; i < segLens.length; i += 1) {
-    const seg = segLens[i];
-    if (d <= seg) {
-      const t = seg < 1e-9 ? 0 : d / seg;
-      const a = points[i];
-      const b = points[i + 1];
-      return L.latLng(a.lat + t * (b.lat - a.lat), a.lng + t * (b.lng - a.lng));
-    }
-    d -= seg;
-  }
-  return points[points.length - 1];
-}
-
-function tickRouteAnimation(now) {
-  if (!map || !routeAnimationHeadMarker || !routeAnimationToggle?.checked) return;
-  const elapsed = (now - routeAnimationT0) % ROUTE_ANIM_DURATION_MS;
-  const dist = (elapsed / ROUTE_ANIM_DURATION_MS) * routeAnimationTotalLen * 0.9999;
-  const ll = latLngAtCumulativeDistance(routeAnimationSampleLatLngs, routeAnimationSegmentLens, dist);
-  if (ll) routeAnimationHeadMarker.setLatLng(ll);
-  const prog = routeAnimationTotalLen > 0 ? dist / routeAnimationTotalLen : 0;
-  const mm = routeAnimationMinM + (routeAnimationMaxM - routeAnimationMinM) * prog;
-  routeAnimationHeadMarker.setStyle({
-    fillColor: colorForMinutesInDaySpan(mm, routeAnimationMinM, routeAnimationMaxM),
-  });
-  routeAnimationRafId = requestAnimationFrame(tickRouteAnimation);
 }
 
 function setRouteAnimationHint(text) {
@@ -1410,15 +1355,15 @@ function syncRouteAnimationLayer() {
     .filter((a) => Number.isFinite(a.lat) && Number.isFinite(a.lng) && !a.pinHidden)
     .sort(compareActivitiesByDayThenTime);
   if (activities.length < 2) {
-    setRouteAnimationHint("That day needs at least two visible pins (coordinates) to build a route.");
+    setRouteAnimationHint("That day needs at least two visible pins (coordinates) to draw a route.");
     return;
   }
   const minutesList = activities.map((a) => parseActivityTimeToMinutes(a.time));
-  routeAnimationMinM = Math.min(...minutesList);
-  routeAnimationMaxM = Math.max(...minutesList);
+  const minM = Math.min(...minutesList);
+  const maxM = Math.max(...minutesList);
   ensureRouteAnimationPanes();
   routeAnimationLayerGroup = L.layerGroup().addTo(map);
-  const steps = ROUTE_ANIM_GRADIENT_STEPS;
+  const steps = ROUTE_DAY_GRADIENT_STEPS;
   for (let i = 0; i < activities.length - 1; i += 1) {
     const a0 = activities[i];
     const a1 = activities[i + 1];
@@ -1431,7 +1376,7 @@ function syncRouteAnimationLayer() {
       const p1 = L.latLng(a0.lat + u1 * (a1.lat - a0.lat), a0.lng + u1 * (a1.lng - a0.lng));
       const uMid = (u0 + u1) / 2;
       const mins = m0 + uMid * (m1 - m0);
-      const color = colorForMinutesInDaySpan(mins, routeAnimationMinM, routeAnimationMaxM);
+      const color = colorForMinutesInDaySpan(mins, minM, maxM);
       L.polyline([p0, p1], {
         color,
         weight: 5,
@@ -1443,41 +1388,9 @@ function syncRouteAnimationLayer() {
       }).addTo(routeAnimationLayerGroup);
     }
   }
-  routeAnimationSampleLatLngs = [L.latLng(activities[0].lat, activities[0].lng)];
-  for (let i = 0; i < activities.length - 1; i += 1) {
-    const a0 = activities[i];
-    const a1 = activities[i + 1];
-    for (let s = 1; s <= steps; s += 1) {
-      const u = s / steps;
-      routeAnimationSampleLatLngs.push(L.latLng(a0.lat + u * (a1.lat - a0.lat), a0.lng + u * (a1.lng - a0.lng)));
-    }
-  }
-  routeAnimationSegmentLens = [];
-  routeAnimationTotalLen = 0;
-  for (let i = 1; i < routeAnimationSampleLatLngs.length; i += 1) {
-    const len = map.distance(routeAnimationSampleLatLngs[i - 1], routeAnimationSampleLatLngs[i]);
-    routeAnimationSegmentLens.push(len);
-    routeAnimationTotalLen += len;
-  }
-  if (routeAnimationTotalLen < 1) {
-    setRouteAnimationHint("Route is too short to animate.");
-    clearRouteAnimationVisuals();
-    return;
-  }
-  routeAnimationHeadMarker = L.circleMarker(routeAnimationSampleLatLngs[0], {
-    radius: 8,
-    color: "#ffffff",
-    weight: 2,
-    fillColor: colorForMinutesInDaySpan(routeAnimationMinM, routeAnimationMinM, routeAnimationMaxM),
-    fillOpacity: 0.95,
-    pane: "routeAnimationHead",
-    interactive: false,
-  }).addTo(map);
   setRouteAnimationHint(
-    `${activities.length} stops • line colors early (gold) → late (purple) by time • pins stay on top`
+    `${activities.length} stops in time order • gold (earlier) → purple (later) • pins stay on top`
   );
-  routeAnimationT0 = performance.now();
-  routeAnimationRafId = requestAnimationFrame(tickRouteAnimation);
 }
 
 function renderMapPins() {
