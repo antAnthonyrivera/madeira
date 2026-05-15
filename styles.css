@@ -686,6 +686,102 @@ button.small {
   padding: 0.45rem 0.55rem;
 }
 
+.trip-row-wrap {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.trip-row-wrap .trip-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.trip-row-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.25rem;
+}
+
+.trip-meta-btn {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.45rem;
+}
+
+.roster-hint {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+}
+
+.trip-roster-module {
+  gap: 0.35rem;
+}
+
+.activity-bulk-toolbar {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.activity-card-with-select {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.activity-card-select {
+  flex-shrink: 0;
+  padding-top: 0.15rem;
+  cursor: pointer;
+}
+
+.activity-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.timeline-bulk-toolbar {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.5rem;
+}
+
+.timeline-event-card-with-select {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.timeline-event-select {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.timeline-event-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.member-row-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.member-edit-btn {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 0.12rem 0.42rem;
+  font-size: 0.78rem;
+}
+
 .trip-row {
   display: flex;
   justify-content: space-between;

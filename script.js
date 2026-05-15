@@ -3,7 +3,12 @@ const SUPABASE_ANON_KEY = "sb_publishable_l5KJxT_og6A7VKKK2-5MOg_wtBEDb7F";
 const GEMINI_EDGE_FUNCTION_URL = "https://rwibuoccrcgrozysfwfw.functions.supabase.co/gemini-proxy";
 const GEMINI_API_KEY_CACHE_KEY = "trip-planner-gemini-key";
 const DEFAULT_MEMBERS = ["Anthony", "Vivian", "Jason", "Darrell"];
-const DEFAULT_TRIP = { id: "00000000-0000-4000-8000-000000000001", name: "Madeira" };
+const DEFAULT_TRIP = {
+  id: "00000000-0000-4000-8000-000000000001",
+  name: "Madeira",
+  createdBy: DEFAULT_MEMBERS[0],
+  archivedAt: null,
+};
 const DEFAULT_WMS_URL = "";
 
 let map = null;
@@ -22,6 +27,7 @@ let syncQueued = false;
 let geminiApiKey = "";
 let supportsLayersCollapsedColumn = true;
 let supportsDeletedColumns = true;
+let supportsTripMetaColumns = true;
 const localDeletedActivityMetaById = new Map();
 let selectedWeatherLocationKey = "madeira";
 let deviceWeatherCoords = null;
@@ -129,6 +135,19 @@ const closeTimelineModalButton = document.querySelector("#close-timeline-modal")
 const timelineDateRangeLabel = document.querySelector("#timeline-date-range-label");
 const timelineChartHost = document.querySelector("#timeline-chart-host");
 const timelineEventsHost = document.querySelector("#timeline-events-host");
+const activityBulkToolbar = document.querySelector("#activity-bulk-toolbar");
+const activitySelectAllVisibleButton = document.querySelector("#activity-select-all-visible");
+const activityClearSelectionButton = document.querySelector("#activity-clear-selection");
+const activityBulkDeleteButton = document.querySelector("#activity-bulk-delete");
+const activitySelectionCountLabel = document.querySelector("#activity-selection-count");
+const timelineSelectAllButton = document.querySelector("#timeline-select-all");
+const timelineClearSelectionButton = document.querySelector("#timeline-clear-selection");
+const timelineBulkDeleteButton = document.querySelector("#timeline-bulk-delete");
+const timelineSelectionCountLabel = document.querySelector("#timeline-selection-count");
+
+const activityPanelSelection = new Set();
+const timelineActivitySelection = new Set();
+let lastActivityPanelTripId = "";
 
 const fields = {
   title: document.querySelector("#activity-title"),
@@ -262,8 +281,13 @@ function setupHandlers() {
   addTripButton.addEventListener("click", () => {
     const name = window.prompt("Trip name");
     if (!name || !name.trim()) return;
-    const trip = { id: crypto.randomUUID(), name: name.trim() };
+    const author = state.currentUserName || state.members[0] || DEFAULT_MEMBERS[0];
+    const trip = { id: crypto.randomUUID(), name: name.trim(), createdBy: author, archivedAt: null };
     state.trips.push(trip);
+    state.tripMembersByTripId[trip.id] = [author];
+    if (!state.members.includes(author)) {
+      state.members.push(author);
+    }
     state.currentTripId = trip.id;
     saveState();
     closeAllDropdowns();
@@ -350,15 +374,67 @@ function setupHandlers() {
     activityModal.classList.remove("hidden");
   });
   openTimelineModalButton.addEventListener("click", () => {
+    timelineActivitySelection.clear();
     renderTimelineModal();
     timelineModal.classList.remove("hidden");
   });
   closeTimelineModalButton.addEventListener("click", () => {
+    timelineActivitySelection.clear();
     timelineModal.classList.add("hidden");
   });
   timelineModal.addEventListener("click", (event) => {
-    if (event.target === timelineModal) timelineModal.classList.add("hidden");
+    if (event.target === timelineModal) {
+      timelineActivitySelection.clear();
+      timelineModal.classList.add("hidden");
+    }
   });
+
+  if (activitySelectAllVisibleButton) {
+    activitySelectAllVisibleButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      getRangeActivities()
+        .sort(compareActivitiesByDayThenTime)
+        .forEach((activity) => activityPanelSelection.add(activity.id));
+      renderDailyActivities();
+    });
+  }
+  if (activityClearSelectionButton) {
+    activityClearSelectionButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      activityPanelSelection.clear();
+      renderDailyActivities();
+    });
+  }
+  if (activityBulkDeleteButton) {
+    activityBulkDeleteButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      deleteActivitiesByIds(activityPanelSelection);
+    });
+  }
+
+  if (timelineSelectAllButton) {
+    timelineSelectAllButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      getRangeActivities()
+        .sort(compareActivitiesByDayThenTime)
+        .forEach((activity) => timelineActivitySelection.add(activity.id));
+      renderTimelineModal();
+    });
+  }
+  if (timelineClearSelectionButton) {
+    timelineClearSelectionButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      timelineActivitySelection.clear();
+      renderTimelineModal();
+    });
+  }
+  if (timelineBulkDeleteButton) {
+    timelineBulkDeleteButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      deleteActivitiesByIds(timelineActivitySelection);
+    });
+  }
+
   closeActivityModalButton.addEventListener("click", () => {
     activityModal.classList.add("hidden");
     editingActivityId = null;
@@ -450,6 +526,152 @@ function toggleDropdown(kind) {
   if (wasHidden) target.classList.remove("hidden");
 }
 
+function parseTripMembersJson(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map((item) => String(item || "").trim()).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function isTripArchived(trip) {
+  return Boolean(trip?.archivedAt);
+}
+
+function isCurrentUserAuthorOfTrip(trip) {
+  if (!trip || !state.currentUserName) return false;
+  return String(trip.createdBy || "").trim() === String(state.currentUserName).trim();
+}
+
+function isMissingTripMetaColumnsError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  const mentionsCol =
+    message.includes("created_by") || message.includes("archived_at") || message.includes("trip_members");
+  return mentionsCol && (message.includes("could not find") || message.includes("does not exist") || message.includes("undefined column"));
+}
+
+function clearActivityPanelSelectionIfTripChanged() {
+  if (lastActivityPanelTripId && lastActivityPanelTripId !== state.currentTripId) {
+    activityPanelSelection.clear();
+  }
+  lastActivityPanelTripId = state.currentTripId;
+}
+
+function softDeleteActivity(activity) {
+  if (!activity || isActivityDeleted(activity)) return;
+  activity.deletedAt = new Date().toISOString();
+  activity.deletedBy = state.currentUserName || "Someone";
+  localDeletedActivityMetaById.set(activity.id, {
+    deletedAt: activity.deletedAt,
+    deletedBy: activity.deletedBy,
+  });
+  activity.pinHidden = true;
+  createActivityDeletedNotifications(activity);
+}
+
+function deleteActivitiesByIds(activityIds) {
+  const ids = [...activityIds].filter(Boolean);
+  if (!ids.length) return;
+  const titles = ids
+    .map((id) => state.activities.find((item) => item.id === id))
+    .filter(Boolean)
+    .map((a) => a.title);
+  const preview = titles.slice(0, 3).join(", ");
+  const suffix = titles.length > 3 ? "…" : "";
+  const confirmed = window.confirm(
+    ids.length === 1
+      ? `Delete "${preview || "this activity"}" for everyone in this trip?`
+      : `Delete ${ids.length} activities for everyone in this trip?\n\nIncludes: ${preview}${suffix}`
+  );
+  if (!confirmed) return;
+  ids.forEach((id) => {
+    const activity = state.activities.find((item) => item.id === id);
+    softDeleteActivity(activity);
+  });
+  activityPanelSelection.clear();
+  timelineActivitySelection.clear();
+  saveState();
+  renderAll();
+}
+
+function renamePersonOnCurrentTrip(oldName, newName) {
+  const prev = String(oldName || "").trim();
+  const next = String(newName || "").trim();
+  if (!prev || !next || prev === next) return;
+  const members = getCurrentTripMembers();
+  if (!members.includes(prev)) return;
+  if (members.includes(next)) {
+    window.alert("That name is already on this trip.");
+    return;
+  }
+  state.tripMembersByTripId[state.currentTripId] = members.map((name) => (name === prev ? next : name));
+  const memberIndex = state.members.indexOf(prev);
+  if (memberIndex !== -1) state.members[memberIndex] = next;
+  if (state.currentUserName === prev) state.currentUserName = next;
+  state.activities.forEach((activity) => {
+    if (activity.tripId !== state.currentTripId || !Array.isArray(activity.taggedMembers)) return;
+    activity.taggedMembers = activity.taggedMembers.map((name) => (name === prev ? next : name));
+  });
+  state.notifications.forEach((notification) => {
+    if (notification.tripId !== state.currentTripId) return;
+    if (notification.userName === prev) notification.userName = next;
+    if (notification.fromUser === prev) notification.fromUser = next;
+  });
+  const prefs = state.userPreferencesByName || {};
+  if (prefs[prev]) {
+    prefs[next] = prefs[prev];
+    delete prefs[prev];
+    state.userPreferencesByName = prefs;
+  }
+  const trip = state.trips.find((t) => t.id === state.currentTripId);
+  if (trip && trip.createdBy === prev) trip.createdBy = next;
+  saveState();
+  renderAll();
+}
+
+function archiveTripById(tripId) {
+  const trip = state.trips.find((t) => t.id === tripId);
+  if (!trip || isTripArchived(trip) || !isCurrentUserAuthorOfTrip(trip)) return;
+  if (!window.confirm(`Archive "${trip.name}"? It will move to Archived trips.`)) return;
+  trip.archivedAt = new Date().toISOString();
+  if (state.currentTripId === tripId) {
+    const nextActive = state.trips.find((t) => !isTripArchived(t) && t.id !== tripId);
+    state.currentTripId = nextActive?.id || state.trips.find((t) => t.id !== tripId)?.id || tripId;
+  }
+  saveState();
+  renderAll();
+}
+
+function unarchiveTripById(tripId) {
+  const trip = state.trips.find((t) => t.id === tripId);
+  if (!trip || !isTripArchived(trip) || !isCurrentUserAuthorOfTrip(trip)) return;
+  trip.archivedAt = null;
+  saveState();
+  renderAll();
+}
+
+function updateActivityBulkToolbarUi() {
+  if (!activityBulkToolbar || !activitySelectionCountLabel) return;
+  const n = activityPanelSelection.size;
+  activitySelectionCountLabel.textContent = n ? `${n} selected` : "";
+  if (activityBulkDeleteButton) activityBulkDeleteButton.disabled = n === 0;
+}
+
+function updateTimelineBulkToolbarUi() {
+  if (!timelineSelectionCountLabel) return;
+  const n = timelineActivitySelection.size;
+  timelineSelectionCountLabel.textContent = n ? `${n} selected` : "";
+  if (timelineBulkDeleteButton) timelineBulkDeleteButton.disabled = n === 0;
+}
+
 function getRangeActivities() {
   const start = normalizeDayForSort(rangeStartInput.value || selectedDay);
   const end = normalizeDayForSort(rangeEndInput.value || selectedDay);
@@ -466,32 +688,91 @@ function getRangeActivities() {
 
 function renderTripHeader() {
   const activeTrip = state.trips.find((trip) => trip.id === state.currentTripId) || state.trips[0] || DEFAULT_TRIP;
-  selectedTripBrand.textContent = activeTrip.name;
+  selectedTripBrand.textContent = isTripArchived(activeTrip) ? `${activeTrip.name} (archived)` : activeTrip.name;
 }
 
 function renderTripList() {
   tripList.innerHTML = "";
-  state.trips.forEach((trip) => {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = `trip-row${trip.id === state.currentTripId ? " active" : ""}`;
+  const archivedTripList = document.querySelector("#archived-trip-list");
+  if (archivedTripList) archivedTripList.innerHTML = "";
+
+  const activeTrips = state.trips.filter((trip) => !isTripArchived(trip));
+  const archivedTrips = state.trips.filter((trip) => isTripArchived(trip));
+
+  const renderTripButton = (trip, { archived } = { archived: false }) => {
+    const row = document.createElement("div");
+    row.className = "trip-row-wrap";
+    const main = document.createElement("button");
+    main.type = "button";
+    main.className = `trip-row${trip.id === state.currentTripId ? " active" : ""}`;
     const label = document.createElement("span");
     label.textContent = trip.name;
-    row.appendChild(label);
+    main.appendChild(label);
     if (trip.id === state.currentTripId) {
       const pill = document.createElement("span");
       pill.className = "active-pill";
       pill.textContent = "Active";
-      row.appendChild(pill);
+      main.appendChild(pill);
     }
-    row.addEventListener("click", () => {
+    main.addEventListener("click", () => {
       state.currentTripId = trip.id;
       saveState();
       closeAllDropdowns();
       renderAll();
     });
-    tripList.appendChild(row);
-  });
+
+    const actions = document.createElement("div");
+    actions.className = "trip-row-actions";
+    if (!archived && isCurrentUserAuthorOfTrip(trip)) {
+      const archiveBtn = document.createElement("button");
+      archiveBtn.type = "button";
+      archiveBtn.className = "small trip-meta-btn";
+      archiveBtn.textContent = "Archive";
+      archiveBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        archiveTripById(trip.id);
+      });
+      actions.appendChild(archiveBtn);
+    }
+    if (archived && isCurrentUserAuthorOfTrip(trip)) {
+      const unarchiveBtn = document.createElement("button");
+      unarchiveBtn.type = "button";
+      unarchiveBtn.className = "small trip-meta-btn";
+      unarchiveBtn.textContent = "Unarchive";
+      unarchiveBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        unarchiveTripById(trip.id);
+      });
+      actions.appendChild(unarchiveBtn);
+    }
+
+    row.append(main, actions);
+    return row;
+  };
+
+  if (!activeTrips.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "No active trips.";
+    tripList.appendChild(empty);
+  } else {
+    activeTrips.forEach((trip) => {
+      tripList.appendChild(renderTripButton(trip, { archived: false }));
+    });
+  }
+
+  if (archivedTripList) {
+    if (!archivedTrips.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "No archived trips.";
+      archivedTripList.appendChild(empty);
+    } else {
+      archivedTrips.forEach((trip) => {
+        archivedTripList.appendChild(renderTripButton(trip, { archived: true }));
+      });
+    }
+  }
 }
 
 function getCurrentTripMembers() {
@@ -500,7 +781,14 @@ function getCurrentTripMembers() {
   }
   const existing = state.tripMembersByTripId[state.currentTripId];
   if (Array.isArray(existing) && existing.length) return existing;
-  const fallback = [...state.members];
+  const trip = state.trips.find((t) => t.id === state.currentTripId);
+  let fallback;
+  if (state.currentTripId === DEFAULT_TRIP.id) {
+    fallback = [...DEFAULT_MEMBERS];
+  } else {
+    const author = trip?.createdBy || state.currentUserName || state.members[0] || DEFAULT_MEMBERS[0];
+    fallback = author ? [author] : [...DEFAULT_MEMBERS];
+  }
   state.tripMembersByTripId[state.currentTripId] = fallback;
   return state.tripMembersByTripId[state.currentTripId];
 }
@@ -537,12 +825,29 @@ function renderTripMembers() {
     row.className = "member-row";
     const name = document.createElement("span");
     name.textContent = member;
+    const actions = document.createElement("div");
+    actions.className = "member-row-actions";
+
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "member-edit-btn";
+    edit.textContent = "Edit";
+    edit.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const next = window.prompt("Rename traveler", member);
+      if (!next) return;
+      renamePersonOnCurrentTrip(member, next.trim());
+    });
+
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "member-remove-btn";
     remove.textContent = "Remove";
+    remove.disabled = members.length <= 1;
+    remove.title = members.length <= 1 ? "A trip needs at least one person." : "Remove from this trip";
     remove.addEventListener("click", (event) => {
       event.stopPropagation();
+      if (members.length <= 1) return;
       const next = getCurrentTripMembers().filter((item) => item !== member);
       state.tripMembersByTripId[state.currentTripId] = next;
       if (state.currentUserName === member) {
@@ -551,7 +856,8 @@ function renderTripMembers() {
       saveState();
       renderAll();
     });
-    row.append(name, remove);
+    actions.append(edit, remove);
+    row.append(name, actions);
     tripMemberList.appendChild(row);
   });
 }
@@ -618,6 +924,7 @@ function openActivityModalForEdit(activityId) {
 }
 
 function renderDailyActivities() {
+  clearActivityPanelSelectionIfTripChanged();
   dailyActivityList.innerHTML = "";
   const filtered = getRangeActivities().sort(compareActivitiesByDayThenTime);
   activitiesTitle.textContent = `Activities (${filtered.length})`;
@@ -627,13 +934,31 @@ function renderDailyActivities() {
     empty.className = "empty";
     empty.textContent = "No activities in selected date range.";
     dailyActivityList.appendChild(empty);
+    updateActivityBulkToolbarUi();
     return;
   }
 
   filtered.forEach((activity) => {
     const card = document.createElement("article");
-    card.className = "layer-item activity-openable";
+    card.className = "layer-item activity-openable activity-card-with-select";
     card.dataset.activityId = activity.id;
+
+    const selectWrap = document.createElement("label");
+    selectWrap.className = "activity-card-select";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = activityPanelSelection.has(activity.id);
+    checkbox.addEventListener("click", (event) => event.stopPropagation());
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) activityPanelSelection.add(activity.id);
+      else activityPanelSelection.delete(activity.id);
+      updateActivityBulkToolbarUi();
+    });
+    selectWrap.appendChild(checkbox);
+
+    const body = document.createElement("div");
+    body.className = "activity-card-body";
+
     const activityWeather = getActivityWeatherSnapshot(activity);
     const accentStrip = document.createElement("div");
     accentStrip.className = `category-strip ${categoryAccentClass(activity.category)}`;
@@ -648,8 +973,8 @@ function renderDailyActivities() {
     notes.textContent = activity.notes || "No details";
     const tags = document.createElement("p");
     tags.className = "meta";
-    tags.textContent = activity.taggedMembers.length
-      ? `Tagged: ${activity.taggedMembers.join(", ")}`
+    tags.textContent = (activity.taggedMembers || []).length
+      ? `Tagged: ${(activity.taggedMembers || []).join(", ")}`
       : "Tagged: none";
     const confidence = document.createElement("p");
     confidence.className = "meta";
@@ -707,9 +1032,11 @@ function renderDailyActivities() {
     card.addEventListener("click", () => {
       openActivityModalForEdit(activity.id);
     });
-    card.append(accentStrip, heading, meta, notes, tags, confidence, actions);
+    body.append(accentStrip, heading, meta, notes, tags, confidence, actions);
+    card.append(selectWrap, body);
     dailyActivityList.appendChild(card);
   });
+  updateActivityBulkToolbarUi();
 }
 
 function deleteActivityForTrip(activityId) {
@@ -717,14 +1044,7 @@ function deleteActivityForTrip(activityId) {
   if (!activity || isActivityDeleted(activity)) return;
   const confirmed = window.confirm(`Delete "${activity.title}" for everyone in this trip?`);
   if (!confirmed) return;
-  activity.deletedAt = new Date().toISOString();
-  activity.deletedBy = state.currentUserName || "Someone";
-  localDeletedActivityMetaById.set(activity.id, {
-    deletedAt: activity.deletedAt,
-    deletedBy: activity.deletedBy,
-  });
-  activity.pinHidden = true;
-  createActivityDeletedNotifications(activity);
+  softDeleteActivity(activity);
   saveState();
   renderAll();
 }
@@ -737,10 +1057,53 @@ function renderTimelineModal() {
   if (!activities.length) {
     timelineChartHost.innerHTML = `<p class="meta">No activities in selected range.</p>`;
     timelineEventsHost.innerHTML = `<p class="empty">No activities to visualize.</p>`;
+    updateTimelineBulkToolbarUi();
     return;
   }
   timelineChartHost.innerHTML = buildTimelineChartSvg(activities);
-  timelineEventsHost.innerHTML = buildTimelineDayRows(activities);
+  timelineEventsHost.innerHTML = "";
+  const byDay = new Map();
+  activities.forEach((activity) => {
+    const day = normalizeDayForSort(activity.day);
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(activity);
+  });
+  [...byDay.entries()].forEach(([day, dayActivities]) => {
+    const section = document.createElement("section");
+    section.className = "timeline-day-row";
+    const heading = document.createElement("div");
+    heading.className = "timeline-day-heading";
+    heading.textContent = formatDayDisplay(day);
+    const grid = document.createElement("div");
+    grid.className = "timeline-day-grid";
+    dayActivities.forEach((activity) => {
+      const article = document.createElement("article");
+      article.className = "timeline-event-card timeline-event-card-with-select";
+      const select = document.createElement("label");
+      select.className = "timeline-event-select";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = timelineActivitySelection.has(activity.id);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) timelineActivitySelection.add(activity.id);
+        else timelineActivitySelection.delete(activity.id);
+        updateTimelineBulkToolbarUi();
+      });
+      select.appendChild(checkbox);
+      const content = document.createElement("div");
+      content.className = "timeline-event-body";
+      content.innerHTML = `
+        <p><strong>${escapeHtml(activity.title)}</strong></p>
+        <p class="meta">${escapeHtml(activity.time)}${activity.location ? ` • ${escapeHtml(activity.location)}` : ""}</p>
+        <p class="meta">${escapeHtml(activity.notes || "No details")}</p>
+      `;
+      article.append(select, content);
+      grid.appendChild(article);
+    });
+    section.append(heading, grid);
+    timelineEventsHost.appendChild(section);
+  });
+  updateTimelineBulkToolbarUi();
 }
 
 function buildTimelineChartSvg(activities) {
@@ -767,36 +1130,6 @@ function buildTimelineChartSvg(activities) {
       ${circles}
     </svg>
   `;
-}
-
-function buildTimelineDayRows(activities) {
-  const byDay = new Map();
-  activities.forEach((activity) => {
-    const day = normalizeDayForSort(activity.day);
-    if (!byDay.has(day)) byDay.set(day, []);
-    byDay.get(day).push(activity);
-  });
-  return [...byDay.entries()]
-    .map(([day, dayActivities]) => {
-      const cards = dayActivities
-        .map(
-          (activity) => `
-          <article class="timeline-event-card">
-            <p><strong>${escapeHtml(activity.title)}</strong></p>
-            <p class="meta">${escapeHtml(activity.time)}${activity.location ? ` • ${escapeHtml(activity.location)}` : ""}</p>
-            <p class="meta">${escapeHtml(activity.notes || "No details")}</p>
-          </article>
-        `
-        )
-        .join("");
-      return `
-        <section class="timeline-day-row">
-          <div class="timeline-day-heading">${escapeHtml(formatDayDisplay(day))}</div>
-          <div class="timeline-day-grid">${cards}</div>
-        </section>
-      `;
-    })
-    .join("");
 }
 
 function truncateLabel(text, max = 18) {
@@ -1264,7 +1597,7 @@ function getUnhandledNotificationsForCurrentTrip() {
 
 function defaultState() {
   return {
-    trips: [DEFAULT_TRIP],
+    trips: [{ ...DEFAULT_TRIP }],
     currentTripId: DEFAULT_TRIP.id,
     members: [...DEFAULT_MEMBERS],
     currentUserName: DEFAULT_MEMBERS[0],
@@ -1281,12 +1614,18 @@ function defaultState() {
 
 function ensureValidTripIds() {
   const tripIdMap = new Map();
+  const tripExtras = (trip) => ({
+    createdBy: String(trip?.createdBy || trip?.created_by || "").trim(),
+    archivedAt: trip?.archivedAt || trip?.archived_at || null,
+  });
   state.trips = (state.trips || []).map((trip, index) => {
     const rawId = String(trip?.id || "").trim();
-    if (isUuid(rawId)) return { id: rawId, name: trip?.name || `Trip ${index + 1}` };
+    const name = trip?.name || `Trip ${index + 1}`;
+    const extras = tripExtras(trip);
+    if (isUuid(rawId)) return { id: rawId, name, ...extras };
     const replacement = crypto.randomUUID();
     tripIdMap.set(rawId, replacement);
-    return { id: replacement, name: trip?.name || `Trip ${index + 1}` };
+    return { id: replacement, name, ...extras };
   });
   if (!state.trips.length) {
     state.trips = [{ ...DEFAULT_TRIP }];
@@ -1320,7 +1659,21 @@ function ensureValidTripIds() {
   });
   state.trips.forEach((trip) => {
     if (!Array.isArray(nextTripMembers[trip.id]) || !nextTripMembers[trip.id].length) {
-      nextTripMembers[trip.id] = [...DEFAULT_MEMBERS];
+      if (trip.id === DEFAULT_TRIP.id) {
+        nextTripMembers[trip.id] = [...DEFAULT_MEMBERS];
+      } else {
+        const author = trip.createdBy || state.currentUserName || state.members[0] || DEFAULT_MEMBERS[0];
+        nextTripMembers[trip.id] = author ? [author] : [];
+      }
+    }
+    if (!trip.createdBy && trip.id !== DEFAULT_TRIP.id) {
+      const roster = nextTripMembers[trip.id];
+      if (Array.isArray(roster) && roster.length === 1) {
+        trip.createdBy = roster[0];
+      }
+    }
+    if (!trip.createdBy && trip.id === DEFAULT_TRIP.id) {
+      trip.createdBy = DEFAULT_TRIP.createdBy || DEFAULT_MEMBERS[0];
     }
   });
   state.tripMembersByTripId = nextTripMembers;
@@ -1379,7 +1732,23 @@ async function bootstrapRemoteState() {
   if (!supabaseClient) return;
   const { data: trips, error: tripsError } = await supabaseClient.from("trips").select("id").limit(1);
   if (!tripsError && (!trips || !trips.length)) {
-    await supabaseClient.from("trips").insert([{ id: DEFAULT_TRIP.id, name: DEFAULT_TRIP.name }]);
+    const seedRow = supportsTripMetaColumns
+      ? {
+          id: DEFAULT_TRIP.id,
+          name: DEFAULT_TRIP.name,
+          created_by: DEFAULT_TRIP.createdBy || DEFAULT_MEMBERS[0],
+          archived_at: null,
+          trip_members: [...DEFAULT_MEMBERS],
+        }
+      : { id: DEFAULT_TRIP.id, name: DEFAULT_TRIP.name };
+    let insertRes = await supabaseClient.from("trips").insert([seedRow]);
+    if (insertRes.error && isMissingTripMetaColumnsError(insertRes.error)) {
+      supportsTripMetaColumns = false;
+      insertRes = await supabaseClient.from("trips").insert([{ id: DEFAULT_TRIP.id, name: DEFAULT_TRIP.name }]);
+    }
+    if (insertRes.error) {
+      console.error("Failed to seed default trip", insertRes.error);
+    }
   }
   const memberRows = DEFAULT_MEMBERS.map((name) => ({ name, layers_collapsed: false }));
   const membersUpsert = await supabaseClient.from("members").upsert(memberRows, { onConflict: "name" });
@@ -1409,18 +1778,46 @@ async function refreshStateFromRemote() {
     });
     return;
   }
-  const trips = (tripsRes.data || []).map((trip) => ({ id: trip.id, name: trip.name }));
+  const prevTripMembers = { ...(state.tripMembersByTripId || {}) };
+  const trips = (tripsRes.data || []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    createdBy: String(row.created_by || "").trim(),
+    archivedAt: row.archived_at || null,
+  }));
   const currentTripId = trips.some((trip) => trip.id === state.currentTripId) ? state.currentTripId : trips[0]?.id || DEFAULT_TRIP.id;
-  const nextTripMembers = { ...(state.tripMembersByTripId || {}) };
+  const nextTripMembers = {};
+  (tripsRes.data || []).forEach((row) => {
+    const fromDb = parseTripMembersJson(row.trip_members);
+    const id = row.id;
+    const tripMeta = trips.find((t) => t.id === id);
+    if (fromDb.length) {
+      nextTripMembers[id] = fromDb;
+    } else if (prevTripMembers[id]?.length) {
+      nextTripMembers[id] = prevTripMembers[id];
+    } else if (id === DEFAULT_TRIP.id) {
+      nextTripMembers[id] = [...DEFAULT_MEMBERS];
+    } else {
+      const author = tripMeta?.createdBy || "";
+      nextTripMembers[id] = author ? [author] : [...DEFAULT_MEMBERS];
+    }
+  });
   trips.forEach((trip) => {
-    const existing = Array.isArray(nextTripMembers[trip.id]) ? nextTripMembers[trip.id] : [];
-    nextTripMembers[trip.id] = existing.length ? existing : [...DEFAULT_MEMBERS];
+    if (!trip.createdBy && trip.id !== DEFAULT_TRIP.id) {
+      const roster = nextTripMembers[trip.id];
+      if (Array.isArray(roster) && roster.length === 1) {
+        trip.createdBy = roster[0];
+      }
+    }
+    if (!trip.createdBy && trip.id === DEFAULT_TRIP.id) {
+      trip.createdBy = DEFAULT_TRIP.createdBy || DEFAULT_MEMBERS[0];
+    }
   });
   const currentMembers = Array.isArray(nextTripMembers[currentTripId]) ? nextTripMembers[currentTripId] : [...DEFAULT_MEMBERS];
   const nextCurrentUser =
     currentMembers.includes(state.currentUserName) && state.currentUserName ? state.currentUserName : currentMembers[0] || "";
   state = {
-    trips: trips.length ? trips : [DEFAULT_TRIP],
+    trips: trips.length ? trips : [{ ...DEFAULT_TRIP }],
     currentTripId,
     members: (membersRes.data || []).map((member) => member.name).filter(Boolean),
     currentUserName: nextCurrentUser,
@@ -1483,8 +1880,29 @@ async function syncStateToRemote() {
   }
   throwIfSupabaseError(membersWrite.error, "saving members");
 
-  const tripRows = state.trips.map((trip) => ({ id: trip.id, name: trip.name }));
-  const tripsWrite = await supabaseClient.from("trips").upsert(tripRows, { onConflict: "id" });
+  const buildTripRow = (trip) => {
+    const members = state.tripMembersByTripId?.[trip.id];
+    const row = {
+      id: trip.id,
+      name: trip.name,
+    };
+    if (supportsTripMetaColumns) {
+      row.created_by = trip.createdBy || null;
+      row.archived_at = trip.archivedAt || null;
+      row.trip_members =
+        Array.isArray(members) && members.length ? members : trip.createdBy ? [trip.createdBy] : [];
+    }
+    return row;
+  };
+  const tripRows = state.trips.map(buildTripRow);
+  let tripsWrite = await supabaseClient.from("trips").upsert(tripRows, { onConflict: "id" });
+  if (tripsWrite.error && isMissingTripMetaColumnsError(tripsWrite.error)) {
+    supportsTripMetaColumns = false;
+    tripsWrite = await supabaseClient.from("trips").upsert(
+      state.trips.map((trip) => ({ id: trip.id, name: trip.name })),
+      { onConflict: "id" }
+    );
+  }
   throwIfSupabaseError(tripsWrite.error, "saving trips");
 
   const activityRows = state.activities.map((activity) => ({
@@ -2238,13 +2656,16 @@ ${activities.join("\n")}`;
 }
 
 async function applyMagicImportPayload(payload, mode = "current") {
+  const author = state.currentUserName || state.members[0] || DEFAULT_MEMBERS[0];
   const tripByName = new Map(state.trips.map((trip) => [trip.name.toLowerCase(), trip]));
   let forcedTrip = null;
   if (mode === "new") {
     const suggestedName = String(payload?.trips?.[0]?.name || "").trim();
     const name = suggestedName || `Imported Trip ${new Date().toLocaleDateString()}`;
-    forcedTrip = { id: crypto.randomUUID(), name };
+    forcedTrip = { id: crypto.randomUUID(), name, createdBy: author, archivedAt: null };
     state.trips.push(forcedTrip);
+    state.tripMembersByTripId[forcedTrip.id] = [author];
+    if (!state.members.includes(author)) state.members.push(author);
     state.currentTripId = forcedTrip.id;
     tripByName.set(name.toLowerCase(), forcedTrip);
   }
@@ -2254,8 +2675,10 @@ async function applyMagicImportPayload(payload, mode = "current") {
       if (!name) return;
       const key = name.toLowerCase();
       if (!tripByName.has(key) && mode !== "current") {
-        const trip = { id: crypto.randomUUID(), name };
+        const trip = { id: crypto.randomUUID(), name, createdBy: author, archivedAt: null };
         state.trips.push(trip);
+        state.tripMembersByTripId[trip.id] = [author];
+        if (!state.members.includes(author)) state.members.push(author);
         tripByName.set(key, trip);
       }
     });

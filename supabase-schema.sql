@@ -34,6 +34,10 @@ create table if not exists public.trips (
   created_at timestamptz not null default now()
 );
 
+alter table public.trips add column if not exists created_by text;
+alter table public.trips add column if not exists archived_at timestamptz;
+alter table public.trips add column if not exists trip_members jsonb not null default '[]'::jsonb;
+
 alter table public.activities add column if not exists trip_id uuid references public.trips(id) on delete cascade;
 alter table public.activities add column if not exists cost decimal(10,2) default 0;
 alter table public.activities add column if not exists category text default '🏔️';

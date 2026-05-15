@@ -11,7 +11,7 @@
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
       crossorigin=""
     />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260514" />
   </head>
   <body>
     <header class="app-header">
@@ -36,14 +36,21 @@
               <div id="trip-list" class="stack trip-list-stack"></div>
               <div class="trip-picker-divider"></div>
               <div class="stack">
+                <h3 class="compact-title">Archived trips</h3>
+                <p class="meta roster-hint">Open an archived trip to view its details.</p>
+                <div id="archived-trip-list" class="stack trip-list-stack"></div>
+              </div>
+              <div class="trip-picker-divider"></div>
+              <div class="stack trip-roster-module">
                 <div class="row between">
-                  <h3 class="compact-title">Trip People</h3>
+                  <h3 class="compact-title">Trip roster</h3>
                   <div class="row">
                     <span class="meta">Me:</span>
                     <select id="current-user-select" class="small-select"></select>
                   </div>
                 </div>
                 <div id="trip-member-list" class="stack"></div>
+                <p class="meta roster-hint">Add, rename, or remove people on this trip.</p>
                 <div class="row">
                   <input id="new-member-name" placeholder="Add person name" />
                   <button id="add-member-btn" type="button" class="small">Add</button>
@@ -139,7 +146,7 @@
 
       <section class="panel side-panel">
         <section class="activity-section">
-          <div class="row between section-header">
+            <div class="row between section-header">
             <h3 id="activities-title">Activities (0)</h3>
             <div class="row right-actions">
               <button id="open-timeline-modal" type="button" class="small icon-with-label" aria-label="Open timeline view">
@@ -150,6 +157,12 @@
               </button>
               <button id="open-activity-modal" type="button" class="small">+ Add</button>
             </div>
+          </div>
+          <div class="activity-bulk-toolbar row" id="activity-bulk-toolbar">
+            <button type="button" id="activity-select-all-visible" class="small">Select all (range)</button>
+            <button type="button" id="activity-clear-selection" class="small">Clear selection</button>
+            <button type="button" id="activity-bulk-delete" class="small danger" disabled>Delete selected</button>
+            <span id="activity-selection-count" class="meta"></span>
           </div>
           <div id="daily-activity-list" class="stack section-list">
             <p class="empty">No activities for selected day.</p>
@@ -308,6 +321,12 @@
           <button id="close-timeline-modal" type="button" class="danger small">Close</button>
         </div>
         <p id="timeline-date-range-label" class="meta"></p>
+        <div class="timeline-bulk-toolbar row" id="timeline-bulk-toolbar">
+          <button type="button" id="timeline-select-all" class="small">Select all (range)</button>
+          <button type="button" id="timeline-clear-selection" class="small">Clear selection</button>
+          <button type="button" id="timeline-bulk-delete" class="small danger" disabled>Delete selected</button>
+          <span id="timeline-selection-count" class="meta"></span>
+        </div>
         <div id="timeline-chart-host" class="timeline-chart-host"></div>
         <div id="timeline-events-host" class="timeline-events-host"></div>
       </div>
@@ -319,6 +338,6 @@
       crossorigin=""
     ></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./script.js"></script>
+    <script src="./script.js?v=20260514"></script>
   </body>
 </html>
